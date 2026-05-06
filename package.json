@@ -1,0 +1,41 @@
+{
+  "name": "smart-home-voice-mobile",
+  "version": "1.0.0",
+  "description": "Expo React Native mobile app for smart home voice control with ESP32 realtime control.",
+  "private": true,
+  "main": "expo/AppEntry",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nhlan285/SmartHome.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nhlan285/SmartHome/issues"
+  },
+  "homepage": "https://github.com/nhlan285/SmartHome#readme",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-navigation/native": "^7.0.0",
+    "@react-navigation/native-stack": "^7.0.0",
+    "axios": "^1.9.0",
+    "expo": "~52.0.0",
+    "expo-asset": "~11.0.5",
+    "expo-av": "~15.0.0",
+    "expo-status-bar": "~2.0.0",
+    "react": "18.3.1",
+    "react-native": "0.76.2",
+    "react-native-gesture-handler": "~2.20.2",
+    "react-native-safe-area-context": "4.12.0",
+    "react-native-screens": "~4.4.0"
+  },
+  "devDependencies": {
+    "babel-plugin-module-resolver": "^5.0.2",
+    "@types/react": "~18.3.0",
+    "typescript": "~5.3.3"
+  }
+}
