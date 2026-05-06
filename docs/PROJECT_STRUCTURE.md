@@ -40,7 +40,7 @@ Reusable UI components:
 
 ## `src/context`
 
-- `LightScheduleContext.tsx`: app-level light scheduler state and execution logic.
+- `LightScheduleContext.tsx`: app-level light scheduler CRUD, local persistence and execution logic.
 
 ## `src/hooks`
 
@@ -59,7 +59,7 @@ Main screens:
 - `ControlScreen.tsx`: manual room/device ON/OFF control.
 - `VoiceScreen.tsx`: hold-to-talk voice flow with local mock parser.
 - `HistoryScreen.tsx`: backend/manual command history.
-- `ScheduleScreen.tsx`: light schedule overview, enable/disable and run-now actions.
+- `ScheduleScreen.tsx`: light schedule CRUD, enable/disable and run-now actions.
 
 Legacy/alternate screens kept for reference:
 
@@ -72,7 +72,7 @@ Legacy/alternate screens kept for reference:
 - `http/`: Axios clients.
 - `mock/`: mock dashboard, voice and history data.
 - `realtime/`: WebSocket services.
-- `schedule/`: light schedule model and defaults.
+- `schedule/`: light schedule model, defaults, validation and sorting helpers.
 
 ## `src/styles`
 

@@ -64,6 +64,9 @@ curl.exe -X POST "http://172.20.10.4:8000/api/voice/process" -F "audio=@sample.m
 - Return to Dashboard and confirm status changed.
 - Open Schedule.
 - Press `Chay ngay` on each schedule to confirm commands work.
+- Press `+ Them` and create a new schedule.
+- Edit the new schedule time/target/action.
+- Delete the new schedule.
 - Toggle one schedule off and on.
 - Open Voice.
 - Record a command and confirm transcript/result displays.

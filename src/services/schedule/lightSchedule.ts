@@ -12,7 +12,17 @@ export interface LightSchedule {
   enabled: boolean;
 }
 
+export type LightScheduleDraft = Omit<LightSchedule, 'id'>;
+
 export const LIGHT_SCHEDULE_ROOMS: Esp32Room[] = ['living', 'bedroom', 'kitchen', 'hallway'];
+
+export const LIGHT_SCHEDULE_TARGETS: LightScheduleTarget[] = [
+  'living',
+  'bedroom',
+  'kitchen',
+  'hallway',
+  'all'
+];
 
 export const DEFAULT_LIGHT_SCHEDULES: LightSchedule[] = [
   {
@@ -60,6 +70,9 @@ const TARGET_LABELS: Record<LightScheduleTarget, string> = {
 export const createDefaultLightSchedules = (): LightSchedule[] =>
   DEFAULT_LIGHT_SCHEDULES.map((schedule) => ({ ...schedule }));
 
+export const createLightScheduleId = (): string =>
+  `light-schedule-${Date.now()}-${Math.round(Math.random() * 100000)}`;
+
 export const getScheduleTargetLabel = (target: LightScheduleTarget): string => TARGET_LABELS[target];
 
 export const getScheduleActionLabel = (action: DeviceAction): string =>
@@ -80,3 +93,36 @@ export const getScheduleRunKey = (scheduleId: string, date = new Date()): string
   const day = date.getDate().toString().padStart(2, '0');
   return `${year}-${month}-${day}-${getCurrentTimeValue(date)}-${scheduleId}`;
 };
+
+export const isValidScheduleTime = (value: string): boolean => {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
+  return Boolean(match);
+};
+
+export const normalizeScheduleTime = (value: string): string => {
+  const trimmed = value.trim();
+  if (!isValidScheduleTime(trimmed)) {
+    throw new Error('Gio hen phai dung dinh dang HH:mm, vi du 05:00.');
+  }
+
+  return trimmed;
+};
+
+export const sortLightSchedules = (schedules: LightSchedule[]): LightSchedule[] =>
+  [...schedules].sort((left, right) => left.time.localeCompare(right.time));
+
+export const createScheduleTitle = (draft: LightScheduleDraft): string => {
+  const title = draft.title.trim();
+  if (title) {
+    return title;
+  }
+
+  return getScheduleCommandSummary({ ...draft, id: 'preview' });
+};
+
+export const createLightSchedule = (draft: LightScheduleDraft): LightSchedule => ({
+  ...draft,
+  id: createLightScheduleId(),
+  title: createScheduleTitle(draft),
+  time: normalizeScheduleTime(draft.time)
+});

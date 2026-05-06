@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Added full CRUD for light schedules inside the mobile app.
+- Added AsyncStorage persistence for locally created schedules.
+- Added schedule create/edit/delete UI and schedule reset action.
+
 ## 1.0.0 - Initial GitHub Release
 
 - Added Expo React Native mobile app structure.

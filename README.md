@@ -9,7 +9,11 @@
 - Ghi âm giọng nói và gửi file âm thanh lên backend AI.
 - Hiển thị lịch sử điều khiển từ backend.
 - Cảnh báo khí gas trên Dashboard và Control khi vượt ngưỡng.
-- Hẹn giờ bật/tắt đèn:
+- CRUD lịch hẹn bật/tắt đèn ngay trong app:
+  - Thêm lịch mới.
+  - Sửa giờ, tên lịch, phòng, hành động bật/tắt và trạng thái kích hoạt.
+  - Xóa lịch cũ.
+  - Lưu lịch local bằng AsyncStorage để mở lại app vẫn còn.
   - 05:00 bật đèn phòng khách.
   - 06:00 bật đèn phòng ngủ.
   - 18:00 bật toàn bộ đèn.
@@ -26,6 +30,7 @@ Lưu ý: chế độ hẹn giờ hiện chạy ở tầng mobile app, nên app c
 - React Navigation native stack
 - Axios
 - Expo AV cho ghi âm
+- AsyncStorage cho lịch hẹn local
 - ESP32 HTTP API và WebSocket
 
 ## Cấu Trúc Thư Mục
