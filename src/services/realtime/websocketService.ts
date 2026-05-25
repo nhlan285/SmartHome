@@ -1,5 +1,6 @@
 import { DashboardSnapshot } from '@/types/models';
-import { BASE_URL, MOCK_DEVICE_STATE, USE_MOCK } from '@/services/api/deviceApi';
+import { ENV } from '@/config/env';
+import { MOCK_DEVICE_STATE, USE_MOCK } from '@/services/api/deviceApi';
 import { mapStatePayloadToDashboardSnapshot } from '@/services/api/esp32Contract';
 
 export type WebSocketCallback = (data: DashboardSnapshot) => void;
@@ -11,11 +12,10 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let mockInterval: ReturnType<typeof setInterval> | null = null;
 let isManualDisconnect = false;
 
-const ESP32_IP = BASE_URL.replace(/^https?:\/\//, '').split(':')[0];
-const WS_URL = `ws://${ESP32_IP}:81`;
+const WS_URL = ENV.DEVICE_WS_URL;
 
 // Neu can doi URL websocket, uu tien doi trong src/config/env.ts:
-// - ENV.ESP32_BASE_URL (service nay tu build WS_URL tu BASE_URL)
+// - ENV.DEVICE_WS_URL
 // Command test websocket nhanh (ngoai app):
 // - npx wscat -c ws://<ESP32_IP>:81
 

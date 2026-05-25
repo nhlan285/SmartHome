@@ -23,9 +23,9 @@ Lưu ý: chế độ hẹn giờ hiện chạy ở tầng mobile app, nên app c
 
 ## Công Nghệ
 
-- Expo `~52`
-- React Native `0.76`
-- React `18`
+- Expo `~54`
+- React Native `0.81`
+- React `19`
 - TypeScript strict mode
 - React Navigation native stack
 - Axios

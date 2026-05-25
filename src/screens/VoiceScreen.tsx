@@ -9,7 +9,10 @@ import {
   View
 } from 'react-native';
 import { Audio } from 'expo-av';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { AppNavBar } from '@/components/AppNavBar';
+import { useAppSettings } from '@/context/AppSettingsContext';
 import { RootStackParamList } from '@/navigation/AppNavigator';
 import { theme } from '@/styles/theme';
 
@@ -83,6 +86,7 @@ const formatIntent = (intent: ParsedIntent): string =>
   `device=${intent.device}, location=${intent.location}, action=${intent.action}`;
 
 export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
+  const { isDarkMode } = useAppSettings();
   const recordingRef = useRef<Audio.Recording | null>(null);
 
   const [recording, setRecording] = useState(false);
@@ -179,7 +183,7 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, isDarkMode && styles.safeAreaDark]}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.caption}>Voice Assistant</Text>
         <Text style={styles.title}>Voice Control</Text>
@@ -197,7 +201,7 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
             disabled={processing}
             activeOpacity={0.8}
           >
-            <Text style={styles.micButtonText}>{recording ? 'Listening...' : 'Hold to Talk'}</Text>
+            <MaterialIcons name={recording ? 'stop' : 'mic'} size={42} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.micHint}>Hold button to record, release to process</Text>
         </View>
@@ -234,23 +238,7 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
           </Text>
         </View>
 
-        <View style={styles.navRow}>
-          <TouchableOpacity style={styles.navButton} onPress={() => navigation.navigate('Dashboard')}>
-            <Text style={styles.navButtonText}>Dashboard</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.navButton} onPress={() => navigation.navigate('Control')}>
-            <Text style={styles.navButtonText}>Control</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.navButton} onPress={() => navigation.navigate('History')}>
-            <Text style={styles.navButtonText}>History</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.navButton} onPress={() => navigation.navigate('Schedule')}>
-            <Text style={styles.navButtonText}>Schedule</Text>
-          </TouchableOpacity>
-        </View>
+        <AppNavBar navigation={navigation} currentRoute="Voice" />
       </ScrollView>
     </SafeAreaView>
   );
@@ -260,6 +248,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.background
+  },
+  safeAreaDark: {
+    backgroundColor: '#101D25'
   },
   container: {
     padding: theme.spacing.md,
@@ -291,10 +282,16 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   micButton: {
-    borderRadius: 999,
-    paddingVertical: 14,
-    width: '100%',
-    alignItems: 'center'
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0E2736',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 6
   },
   idle: {
     backgroundColor: theme.colors.primary
@@ -304,11 +301,6 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.6
-  },
-  micButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16
   },
   micHint: {
     marginTop: 10,
@@ -346,28 +338,5 @@ const styles = StyleSheet.create({
   },
   error: {
     color: theme.colors.danger
-  },
-  navRow: {
-    marginTop: 14,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 8
-  },
-  navButton: {
-    flexGrow: 1,
-    flexBasis: '22%',
-    backgroundColor: '#E4F8FE',
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center'
-  },
-  navButtonText: {
-    color: theme.colors.primary,
-    fontWeight: '700'
   }
 });

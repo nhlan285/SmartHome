@@ -51,11 +51,42 @@
   # npx wscat -c ws://172.20.10.3:81
 */
 
-export const ENV = {
+const normalizeHttpBaseUrl = (url: string): string => {
+  const trimmed = url.trim().replace(/\/+$/, '');
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `http://${trimmed.replace(/^\/+/, '')}`;
+};
+
+const normalizeWebSocketUrl = (url: string): string => {
+  const trimmed = url.trim().replace(/\/+$/, '');
+
+  if (/^wss?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/^http/i, 'ws');
+  }
+
+  return `ws://${trimmed.replace(/^\/+/, '')}`;
+};
+
+const RAW_ENV = {
   BACKEND_BASE_URL: 'http://172.20.10.4:8000',
-  ESP32_BASE_URL: 'http://172.20.10.3',
-  DEVICE_WS_URL: 'ws://172.20.10.3:81',
+  ESP32_BASE_URL: 'http://esp32.local',
+  DEVICE_WS_URL: 'ws://esp32.local:81',
   USE_MOCKS: false
+} as const;
+
+export const ENV = {
+  ...RAW_ENV,
+  BACKEND_BASE_URL: normalizeHttpBaseUrl(RAW_ENV.BACKEND_BASE_URL),
+  ESP32_BASE_URL: normalizeHttpBaseUrl(RAW_ENV.ESP32_BASE_URL),
+  DEVICE_WS_URL: normalizeWebSocketUrl(RAW_ENV.DEVICE_WS_URL)
 } as const;
 
 export const API_PATHS = {

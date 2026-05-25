@@ -94,6 +94,23 @@ const createDevice = (
   updatedAt
 });
 
+const hasOwnKey = (value: unknown, key: string): boolean =>
+  isObject(value) && Object.prototype.hasOwnProperty.call(value, key);
+
+const pushDeviceIfPresent = (
+  devices: DeviceState[],
+  room: Esp32Room,
+  roomState: Esp32RoomState | undefined,
+  device: Esp32Device,
+  updatedAt: string
+): void => {
+  if (!hasOwnKey(roomState, device)) {
+    return;
+  }
+
+  devices.push(createDevice(room, device, roomState?.[device], updatedAt));
+};
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
@@ -142,18 +159,18 @@ export const mapStatePayloadToDashboardSnapshot = (payload: unknown): DashboardS
   const data = payload as Esp32StatePayload;
   const updatedAt = new Date().toISOString();
 
-  const devices: DeviceState[] = [
-    createDevice('living', 'light', data.living?.light, updatedAt),
-    createDevice('living', 'fan', data.living?.fan, updatedAt),
-    createDevice('living', 'door', data.living?.door, updatedAt),
-    createDevice('bedroom', 'light', data.bedroom?.light, updatedAt),
-    createDevice('bedroom', 'fan', data.bedroom?.fan, updatedAt),
-    createDevice('bedroom', 'door', data.bedroom?.door, updatedAt),
-    createDevice('kitchen', 'light', data.kitchen?.light, updatedAt),
-    createDevice('kitchen', 'fan', data.kitchen?.fan, updatedAt),
-    createDevice('kitchen', 'door', data.kitchen?.door, updatedAt),
-    createDevice('hallway', 'light', data.hallway?.light, updatedAt)
-  ];
+  const devices: DeviceState[] = [];
+
+  pushDeviceIfPresent(devices, 'living', data.living, 'light', updatedAt);
+  pushDeviceIfPresent(devices, 'living', data.living, 'fan', updatedAt);
+  pushDeviceIfPresent(devices, 'living', data.living, 'door', updatedAt);
+  pushDeviceIfPresent(devices, 'bedroom', data.bedroom, 'light', updatedAt);
+  pushDeviceIfPresent(devices, 'bedroom', data.bedroom, 'fan', updatedAt);
+  pushDeviceIfPresent(devices, 'bedroom', data.bedroom, 'door', updatedAt);
+  pushDeviceIfPresent(devices, 'kitchen', data.kitchen, 'light', updatedAt);
+  pushDeviceIfPresent(devices, 'kitchen', data.kitchen, 'fan', updatedAt);
+  pushDeviceIfPresent(devices, 'kitchen', data.kitchen, 'door', updatedAt);
+  pushDeviceIfPresent(devices, 'hallway', data.hallway, 'light', updatedAt);
 
   return {
     devices,

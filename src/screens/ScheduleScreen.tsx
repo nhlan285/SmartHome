@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,11 +12,16 @@ import {
   View
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { AppNavBar } from '@/components/AppNavBar';
+import { VoicePrimaryButton } from '@/components/VoicePrimaryButton';
+import { useAppSettings } from '@/context/AppSettingsContext';
 import { RootStackParamList } from '@/navigation/AppNavigator';
 import { useLightSchedules } from '@/context/LightScheduleContext';
+import { getDeviceState } from '@/services/api/deviceApi';
+import { extractRoomDeviceFromDeviceId, Esp32Room } from '@/services/api/esp32Contract';
+import { connectWebSocket } from '@/services/realtime/websocketService';
 import {
   getScheduleActionLabel,
-  getScheduleCommandSummary,
   getScheduleTargetLabel,
   LIGHT_SCHEDULE_TARGETS,
   LightSchedule,
@@ -24,8 +29,22 @@ import {
   LightScheduleTarget
 } from '@/services/schedule/lightSchedule';
 import { theme } from '@/styles/theme';
+import { DashboardSnapshot, DeviceState } from '@/types/models';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Schedule'>;
+
+type HardwareLightTarget = {
+  target: Esp32Room;
+  label: string;
+  device: DeviceState;
+};
+
+type TargetOption = {
+  target: LightScheduleTarget;
+  label: string;
+  statusText: string;
+  isAvailable: boolean;
+};
 
 const createBlankForm = (): LightScheduleDraft => ({
   title: '',
@@ -43,7 +62,30 @@ const createFormFromSchedule = (schedule: LightSchedule): LightScheduleDraft => 
   enabled: schedule.enabled
 });
 
+const formatHardwareStatus = (status?: DeviceState['status']): string => {
+  if (status === 'on') {
+    return 'ON';
+  }
+
+  if (status === 'off') {
+    return 'OFF';
+  }
+
+  return 'UNKNOWN';
+};
+
+const getAllLightsStatusText = (targets: HardwareLightTarget[]): string => {
+  if (targets.length === 0) {
+    return 'Dang cho ESP32';
+  }
+
+  const onCount = targets.filter((item) => item.device.status === 'on').length;
+  const offCount = targets.length - onCount;
+  return `${onCount} ON / ${offCount} OFF`;
+};
+
 export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
+  const { isDarkMode } = useAppSettings();
   const {
     schedules,
     isSchedulerEnabled,
@@ -65,10 +107,133 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [form, setForm] = useState<LightScheduleDraft>(() => createBlankForm());
   const [formError, setFormError] = useState('');
+  const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
+  const [isDeviceStateLoading, setIsDeviceStateLoading] = useState(true);
+  const [deviceStateError, setDeviceStateError] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadInitialDeviceState = async (): Promise<void> => {
+      try {
+        setDeviceStateError('');
+        const data = await getDeviceState();
+        if (isMounted) {
+          setSnapshot(data);
+        }
+      } catch (error: unknown) {
+        if (isMounted) {
+          const message = error instanceof Error ? error.message : 'Khong the tai du lieu ESP32.';
+          setDeviceStateError(message);
+        }
+      } finally {
+        if (isMounted) {
+          setIsDeviceStateLoading(false);
+        }
+      }
+    };
+
+    void loadInitialDeviceState();
+
+    const unsubscribe = connectWebSocket((realtimeData) => {
+      setSnapshot(realtimeData);
+      setDeviceStateError('');
+      setIsDeviceStateLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  const hardwareLightTargets = useMemo<HardwareLightTarget[]>(() => {
+    const uniqueTargets = new Map<Esp32Room, HardwareLightTarget>();
+
+    (snapshot?.devices ?? []).forEach((device) => {
+      const parsed = extractRoomDeviceFromDeviceId(device.deviceId);
+
+      if (!parsed || parsed.device !== 'light') {
+        return;
+      }
+
+      uniqueTargets.set(parsed.room, {
+        target: parsed.room,
+        label: device.name || getScheduleTargetLabel(parsed.room),
+        device
+      });
+    });
+
+    return Array.from(uniqueTargets.values());
+  }, [snapshot]);
+
+  const targetOptions = useMemo<TargetOption[]>(() => {
+    const roomOptions =
+      hardwareLightTargets.length > 0
+        ? hardwareLightTargets.map((item) => ({
+            target: item.target,
+            label: item.label,
+            statusText: formatHardwareStatus(item.device.status),
+            isAvailable: true
+          }))
+        : LIGHT_SCHEDULE_TARGETS.filter((target) => target !== 'all').map((target) => ({
+            target,
+            label: getScheduleTargetLabel(target),
+            statusText: 'Dang cho ESP32',
+            isAvailable: false
+          }));
+
+    return [
+      ...roomOptions,
+      {
+        target: 'all',
+        label: 'Tat ca den',
+        statusText: getAllLightsStatusText(hardwareLightTargets),
+        isAvailable: hardwareLightTargets.length > 0
+      }
+    ];
+  }, [hardwareLightTargets]);
+
+  const targetStatusByTarget = useMemo(() => {
+    const statusMap = new Map<LightScheduleTarget, string>();
+
+    hardwareLightTargets.forEach((item) => {
+      statusMap.set(item.target, formatHardwareStatus(item.device.status));
+    });
+
+    statusMap.set('all', getAllLightsStatusText(hardwareLightTargets));
+    return statusMap;
+  }, [hardwareLightTargets]);
+
+  const targetLabelByTarget = useMemo(() => {
+    const labelMap = new Map<LightScheduleTarget, string>();
+
+    hardwareLightTargets.forEach((item) => {
+      labelMap.set(item.target, item.label);
+    });
+
+    labelMap.set('all', 'Tat ca den');
+    return labelMap;
+  }, [hardwareLightTargets]);
+
+  const getLiveTargetLabel = (target: LightScheduleTarget): string =>
+    targetLabelByTarget.get(target) ?? getScheduleTargetLabel(target);
+
+  const getLiveTargetStatus = (target: LightScheduleTarget): string =>
+    targetStatusByTarget.get(target) ??
+    (isDeviceStateLoading ? 'Dang dong bo ESP32' : 'Khong thay trong ESP32');
+
+  const getLiveScheduleSummary = (schedule: LightSchedule): string =>
+    `${getScheduleActionLabel(schedule.action)} - ${getLiveTargetLabel(schedule.target)}`;
+
+  const hardwareUpdatedAt = snapshot?.sensors.updatedAt
+    ? new Date(snapshot.sensors.updatedAt).toLocaleTimeString()
+    : '--:--';
 
   const openCreateForm = (): void => {
+    const firstHardwareTarget = targetOptions.find((item) => item.target !== 'all')?.target ?? 'living';
     setEditingScheduleId(null);
-    setForm(createBlankForm());
+    setForm({ ...createBlankForm(), target: firstHardwareTarget });
     setFormError('');
     setIsFormVisible(true);
   };
@@ -145,7 +310,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, isDarkMode && styles.safeAreaDark]}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.headerRow}>
           <View style={styles.headerTextBox}>
@@ -178,6 +343,12 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
             {isStoreReady ? 'Da luu local tren may' : 'Dang doc lich hen gio...'}
           </Text>
 
+          <Text style={styles.statusLabel}>ESP32</Text>
+          <Text style={[styles.statusMessage, deviceStateError ? styles.statusMessageError : null]}>
+            {deviceStateError ||
+              (isDeviceStateLoading ? 'Dang dong bo phan cung...' : `Realtime luc ${hardwareUpdatedAt}`)}
+          </Text>
+
           <Text style={styles.statusLabel}>Lan chay gan nhat</Text>
           <Text style={styles.statusMessage}>{lastRunMessage}</Text>
 
@@ -186,20 +357,9 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
           </Pressable>
         </View>
 
-        <View style={styles.navRow}>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Dashboard')}>
-            <Text style={styles.navButtonText}>Dashboard</Text>
-          </Pressable>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Control')}>
-            <Text style={styles.navButtonText}>Control</Text>
-          </Pressable>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Voice')}>
-            <Text style={styles.navButtonText}>Voice</Text>
-          </Pressable>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('History')}>
-            <Text style={styles.navButtonText}>History</Text>
-          </Pressable>
-        </View>
+        <VoicePrimaryButton navigation={navigation} />
+
+        <AppNavBar navigation={navigation} currentRoute="Schedule" />
 
         {screenError ? <Text style={styles.errorText}>{screenError}</Text> : null}
         {storageError ? <Text style={styles.errorText}>{storageError}</Text> : null}
@@ -228,7 +388,10 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
 
                   <View style={styles.scheduleInfo}>
                     <Text style={styles.scheduleTitle}>{schedule.title}</Text>
-                    <Text style={styles.scheduleMeta}>{getScheduleCommandSummary(schedule)}</Text>
+                    <Text style={styles.scheduleMeta}>{getLiveScheduleSummary(schedule)}</Text>
+                    <Text style={styles.scheduleLiveStatus}>
+                      Phan cung: {getLiveTargetStatus(schedule.target)}
+                    </Text>
                   </View>
 
                   <View
@@ -321,13 +484,13 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
 
             <Text style={styles.inputLabel}>Pham vi den</Text>
             <View style={styles.optionGrid}>
-              {LIGHT_SCHEDULE_TARGETS.map((target) => {
-                const isSelected = form.target === target;
+              {targetOptions.map((option) => {
+                const isSelected = form.target === option.target;
                 return (
                   <Pressable
-                    key={target}
+                    key={option.target}
                     style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                    onPress={() => updateFormTarget(target)}
+                    onPress={() => updateFormTarget(option.target)}
                   >
                     <Text
                       style={[
@@ -335,7 +498,16 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
                         isSelected && styles.optionButtonTextSelected
                       ]}
                     >
-                      {getScheduleTargetLabel(target)}
+                      {option.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.optionStatusText,
+                        isSelected && styles.optionStatusTextSelected,
+                        !option.isAvailable && styles.optionStatusTextMuted
+                      ]}
+                    >
+                      {option.statusText}
                     </Text>
                   </Pressable>
                 );
@@ -397,6 +569,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.background
+  },
+  safeAreaDark: {
+    backgroundColor: '#101D25'
   },
   container: {
     padding: theme.spacing.md,
@@ -461,6 +636,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     marginTop: 2
   },
+  statusMessageError: {
+    color: theme.colors.danger,
+    fontWeight: '700'
+  },
   masterToggle: {
     minWidth: 62,
     borderRadius: 999,
@@ -489,29 +668,6 @@ const styles = StyleSheet.create({
   resetButtonText: {
     color: theme.colors.textPrimary,
     fontWeight: '800'
-  },
-  navRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 8
-  },
-  navButton: {
-    flexGrow: 1,
-    flexBasis: '22%',
-    backgroundColor: '#E4F8FE',
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center'
-  },
-  navButtonText: {
-    color: theme.colors.primary,
-    fontWeight: '700'
   },
   errorText: {
     color: theme.colors.danger,
@@ -584,6 +740,12 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     marginTop: 4,
     fontWeight: '600'
+  },
+  scheduleLiveStatus: {
+    color: theme.colors.primary,
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '800'
   },
   actionBadge: {
     minWidth: 52,
@@ -710,6 +872,7 @@ const styles = StyleSheet.create({
   optionButton: {
     flexGrow: 1,
     flexBasis: '30%',
+    minHeight: 64,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -730,6 +893,19 @@ const styles = StyleSheet.create({
   optionButtonTextSelected: {
     color: theme.colors.primary,
     fontWeight: '900'
+  },
+  optionStatusText: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 4,
+    textAlign: 'center'
+  },
+  optionStatusTextSelected: {
+    color: theme.colors.primary
+  },
+  optionStatusTextMuted: {
+    color: theme.colors.textSecondary
   },
   segmentRow: {
     flexDirection: 'row',

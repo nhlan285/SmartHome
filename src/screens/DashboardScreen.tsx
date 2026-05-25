@@ -7,14 +7,19 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { AppNavBar } from '@/components/AppNavBar';
+import { VoicePrimaryButton } from '@/components/VoicePrimaryButton';
+import { useAppSettings } from '@/context/AppSettingsContext';
 import { RootStackParamList } from '@/navigation/AppNavigator';
 import { getDeviceState } from '@/services/api/deviceApi';
 import { connectWebSocket } from '@/services/realtime/websocketService';
 import { theme } from '@/styles/theme';
 import { DashboardSnapshot } from '@/types/models';
+import { getDeviceKindLabel, groupDevicesByRoom } from '@/utils/deviceRooms';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
 const GAS_ALERT_THRESHOLD = 1500;
@@ -24,6 +29,19 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isGasAlertModalVisible, setIsGasAlertModalVisible] = useState(false);
+  const [isSettingsVisible, setIsSettingsVisible] = useState(false);
+  const {
+    colorMode,
+    isDarkMode,
+    isSettingsReady,
+    settingsError,
+    wifiId,
+    profile,
+    toggleColorMode,
+    updateWifiId,
+    resetWifiId,
+    updateProfile
+  } = useAppSettings();
 
   const refreshState = async (): Promise<void> => {
     try {
@@ -85,7 +103,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={[styles.safeArea, isDarkMode && styles.safeAreaDark]}>
         <View style={styles.centerBox}>
           <ActivityIndicator color={theme.colors.primary} />
           <Text style={styles.loadingText}>Dang tai du lieu dashboard...</Text>
@@ -100,27 +118,31 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
     year: 'numeric'
   });
 
-  const deviceCards = (snapshot?.devices ?? []).map((device) => ({
-    title: device.name,
-    status: device.status.toUpperCase()
-  }));
+  const roomGroups = groupDevicesByRoom(snapshot?.devices ?? []);
 
   const lastUpdated = snapshot?.sensors.updatedAt
     ? new Date(snapshot.sensors.updatedAt).toLocaleTimeString()
     : '--:--';
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, isDarkMode && styles.safeAreaDark]}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.headerRow}>
           <View>
             <Text style={styles.greeting}>Good Evening,</Text>
             <Text style={styles.title}>Smart Home</Text>
           </View>
-          <View style={styles.headerIcon}>
-            <Text style={styles.headerIconText}>B</Text>
-          </View>
+          <Pressable
+            accessibilityLabel="Open settings"
+            accessibilityRole="button"
+            style={styles.headerIcon}
+            onPress={() => setIsSettingsVisible(true)}
+          >
+            <Text style={styles.headerIconText}>{profile.avatarInitial}</Text>
+          </Pressable>
         </View>
+
+        <VoicePrimaryButton navigation={navigation} />
 
         <View style={[styles.climateCard, isGasDanger && styles.climateCardDanger]}>
           <View style={styles.climateTopRow}>
@@ -170,38 +192,51 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        {deviceCards.length === 0 ? (
+        {roomGroups.length === 0 ? (
           <Text style={styles.noteText}>Chua co du lieu trang thai thiet bi.</Text>
         ) : null}
 
-        <View style={styles.grid}>
-          {deviceCards.map((card) => {
-            const isOn = card.status === 'ON';
-            return (
-              <View key={card.title} style={[styles.deviceCard, isOn && styles.deviceCardActive]}>
-                <Text style={styles.deviceTitle}>{card.title}</Text>
-                <View style={[styles.statusBadge, isOn ? styles.statusOn : styles.statusOff]}>
-                  <Text style={styles.statusText}>{card.status}</Text>
+        <View style={styles.roomList}>
+          {roomGroups.map((group) => (
+            <View key={group.room} style={styles.roomCard}>
+              <View style={styles.roomHeaderRow}>
+                <View>
+                  <Text style={styles.roomTitle}>{group.label}</Text>
+                  <Text style={styles.roomMeta}>
+                    {group.onCount}/{group.totalCount} thiet bi dang bat
+                  </Text>
+                </View>
+                <View style={styles.roomCountBadge}>
+                  <Text style={styles.roomCountText}>{group.totalCount}</Text>
                 </View>
               </View>
-            );
-          })}
+
+              <View style={styles.deviceGrid}>
+                {group.devices.map((item) => {
+                  const isOn = item.device.status === 'on';
+                  const status = item.device.status.toUpperCase();
+
+                  return (
+                    <View
+                      key={item.device.deviceId}
+                      style={[styles.deviceCard, isOn && styles.deviceCardActive]}
+                    >
+                      <Text style={styles.deviceType}>{getDeviceKindLabel(item.kind)}</Text>
+                      <Text style={styles.deviceTitle} numberOfLines={2}>
+                        {item.device.name}
+                      </Text>
+                      <View style={[styles.statusBadge, isOn ? styles.statusOn : styles.statusOff]}>
+                        <Text style={styles.statusText}>{status}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
         </View>
 
-        <View style={styles.navRow}>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Control')}>
-            <Text style={styles.navButtonText}>Control</Text>
-          </Pressable>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Voice')}>
-            <Text style={styles.navButtonText}>Voice</Text>
-          </Pressable>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('History')}>
-            <Text style={styles.navButtonText}>History</Text>
-          </Pressable>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Schedule')}>
-            <Text style={styles.navButtonText}>Schedule</Text>
-          </Pressable>
-        </View>
+        <AppNavBar navigation={navigation} currentRoute="Dashboard" />
       </ScrollView>
 
       <Modal
@@ -226,6 +261,115 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={isSettingsVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsSettingsVisible(false)}
+      >
+        <View style={styles.settingsOverlay}>
+          <View style={[styles.settingsCard, isDarkMode && styles.settingsCardDark]}>
+            <View style={styles.settingsHeaderRow}>
+              <View>
+                <Text style={[styles.settingsTitle, isDarkMode && styles.settingsTextDark]}>
+                  Settings
+                </Text>
+                <Text style={styles.settingsSubtitle}>
+                  {isSettingsReady ? 'Da dong bo local' : 'Dang doc cai dat...'}
+                </Text>
+              </View>
+              <Pressable style={styles.settingsCloseButton} onPress={() => setIsSettingsVisible(false)}>
+                <Text style={styles.settingsCloseText}>X</Text>
+              </Pressable>
+            </View>
+
+            {settingsError ? <Text style={styles.settingsErrorText}>{settingsError}</Text> : null}
+
+            <View style={styles.settingsSection}>
+              <Text style={[styles.settingsLabel, isDarkMode && styles.settingsTextDark]}>
+                Giao dien
+              </Text>
+              <Pressable
+                style={[styles.modeToggle, isDarkMode && styles.modeToggleDark]}
+                onPress={toggleColorMode}
+              >
+                <View
+                  style={[
+                    styles.modeOption,
+                    colorMode === 'light' && styles.modeOptionActive
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.modeOptionText,
+                      colorMode === 'light' && styles.modeOptionTextActive
+                    ]}
+                  >
+                    Sang
+                  </Text>
+                </View>
+                <View
+                  style={[styles.modeOption, colorMode === 'dark' && styles.modeOptionActive]}
+                >
+                  <Text
+                    style={[
+                      styles.modeOptionText,
+                      colorMode === 'dark' && styles.modeOptionTextActive
+                    ]}
+                  >
+                    Toi
+                  </Text>
+                </View>
+              </Pressable>
+            </View>
+
+            <View style={styles.settingsSection}>
+              <Text style={[styles.settingsLabel, isDarkMode && styles.settingsTextDark]}>
+                Wi-Fi ID
+              </Text>
+              <View style={styles.settingsInputRow}>
+                <TextInput
+                  style={[styles.settingsInput, isDarkMode && styles.settingsInputDark]}
+                  value={wifiId}
+                  onChangeText={updateWifiId}
+                  placeholder="SMART_HOME_WIFI"
+                  placeholderTextColor={theme.colors.textSecondary}
+                />
+                <Pressable style={styles.resetWifiButton} onPress={resetWifiId}>
+                  <Text style={styles.resetWifiButtonText}>Reset</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={styles.settingsSection}>
+              <Text style={[styles.settingsLabel, isDarkMode && styles.settingsTextDark]}>
+                Tai khoan
+              </Text>
+              <TextInput
+                style={[styles.settingsInput, isDarkMode && styles.settingsInputDark]}
+                value={profile.displayName}
+                onChangeText={(displayName) => updateProfile({ ...profile, displayName })}
+                placeholder="Ten tai khoan"
+                placeholderTextColor={theme.colors.textSecondary}
+              />
+              <View style={styles.avatarRow}>
+                <View style={styles.avatarPreview}>
+                  <Text style={styles.avatarPreviewText}>{profile.avatarInitial}</Text>
+                </View>
+                <TextInput
+                  style={[styles.avatarInput, isDarkMode && styles.settingsInputDark]}
+                  value={profile.avatarInitial}
+                  onChangeText={(avatarInitial) => updateProfile({ ...profile, avatarInitial })}
+                  placeholder="B"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  maxLength={2}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -234,6 +378,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.background
+  },
+  safeAreaDark: {
+    backgroundColor: '#101D25'
   },
   container: {
     padding: theme.spacing.md,
@@ -376,34 +523,81 @@ const styles = StyleSheet.create({
     color: theme.colors.warning,
     fontWeight: '700'
   },
-  grid: {
+  roomList: {
+    gap: 12
+  },
+  roomCard: {
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md
+  },
+  roomHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm
+  },
+  roomTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 19,
+    fontWeight: '900'
+  },
+  roomMeta: {
+    color: theme.colors.textSecondary,
+    marginTop: 3,
+    fontWeight: '600'
+  },
+  roomCountBadge: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E4F8FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10
+  },
+  roomCountText: {
+    color: theme.colors.primary,
+    fontWeight: '900'
+  },
+  deviceGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10
   },
   deviceCard: {
-    width: '48%',
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    flexGrow: 1,
+    flexBasis: '47%',
+    borderRadius: 14,
+    backgroundColor: '#F8FCFE',
     borderWidth: 1,
     borderColor: theme.colors.border,
     padding: theme.spacing.sm,
-    minHeight: 104,
+    minHeight: 116,
     justifyContent: 'space-between'
   },
   deviceCardActive: {
     backgroundColor: '#DEF6FB',
     borderColor: '#9BE1F0'
   },
+  deviceType: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: '900'
+  },
   deviceTitle: {
     color: theme.colors.textPrimary,
-    fontWeight: '700'
+    fontWeight: '800',
+    marginTop: 4
   },
   statusBadge: {
     alignSelf: 'flex-start',
     borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 6
+    paddingVertical: 6,
+    marginTop: 8
   },
   statusOn: {
     backgroundColor: '#D8F8F0'
@@ -516,5 +710,158 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: '#B31D3C',
     fontWeight: '800'
+  },
+  settingsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(12, 35, 48, 0.46)',
+    justifyContent: 'center',
+    padding: theme.spacing.md
+  },
+  settingsCard: {
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md
+  },
+  settingsCardDark: {
+    backgroundColor: '#142733',
+    borderColor: '#28414D'
+  },
+  settingsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 12
+  },
+  settingsTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 24,
+    fontWeight: '900'
+  },
+  settingsSubtitle: {
+    color: theme.colors.textSecondary,
+    marginTop: 3,
+    fontWeight: '600'
+  },
+  settingsTextDark: {
+    color: '#EAF7FB'
+  },
+  settingsCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8EEF4'
+  },
+  settingsCloseText: {
+    color: theme.colors.textPrimary,
+    fontWeight: '900'
+  },
+  settingsSection: {
+    marginTop: 12
+  },
+  settingsLabel: {
+    color: theme.colors.textPrimary,
+    fontWeight: '900',
+    marginBottom: 8
+  },
+  settingsErrorText: {
+    color: theme.colors.danger,
+    fontWeight: '800',
+    marginBottom: 4
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: '#F8FCFE',
+    padding: 6
+  },
+  modeToggleDark: {
+    backgroundColor: '#101D25',
+    borderColor: '#28414D'
+  },
+  modeOption: {
+    flex: 1,
+    borderRadius: 9,
+    paddingVertical: 10,
+    alignItems: 'center'
+  },
+  modeOptionActive: {
+    backgroundColor: theme.colors.primary
+  },
+  modeOptionText: {
+    color: theme.colors.textSecondary,
+    fontWeight: '800'
+  },
+  modeOptionTextActive: {
+    color: '#FFFFFF'
+  },
+  settingsInputRow: {
+    flexDirection: 'row',
+    gap: 8
+  },
+  settingsInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: theme.colors.textPrimary,
+    backgroundColor: '#F8FCFE',
+    fontWeight: '700'
+  },
+  settingsInputDark: {
+    backgroundColor: '#101D25',
+    borderColor: '#28414D',
+    color: '#EAF7FB'
+  },
+  resetWifiButton: {
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E4F8FE'
+  },
+  resetWifiButtonText: {
+    color: theme.colors.primary,
+    fontWeight: '900'
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10
+  },
+  avatarPreview: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primary
+  },
+  avatarPreviewText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '900'
+  },
+  avatarInput: {
+    width: 80,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: theme.colors.textPrimary,
+    backgroundColor: '#F8FCFE',
+    fontWeight: '900',
+    textAlign: 'center'
   }
 });

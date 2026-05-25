@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { AppNavBar } from '@/components/AppNavBar';
+import { VoicePrimaryButton } from '@/components/VoicePrimaryButton';
+import { useAppSettings } from '@/context/AppSettingsContext';
 import { RootStackParamList } from '@/navigation/AppNavigator';
 import { HistoryList } from '@/components/HistoryList';
 import { getControlHistory } from '@/services/api/historyApi';
@@ -10,6 +13,7 @@ import { ControlHistoryItem } from '@/types/models';
 type Props = NativeStackScreenProps<RootStackParamList, 'History'>;
 
 export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
+  const { isDarkMode } = useAppSettings();
   const [history, setHistory] = useState<ControlHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,34 +37,24 @@ export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
   }, [loadHistory]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, isDarkMode && styles.safeAreaDark]}>
       <View style={styles.container}>
         <Text style={styles.title}>History</Text>
         <Text style={styles.subtitle}>Lich su dieu khien tu backend</Text>
 
-        <View style={styles.navRow}>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Dashboard')}>
-            <Text style={styles.navButtonText}>Dashboard</Text>
-          </Pressable>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Control')}>
-            <Text style={styles.navButtonText}>Control</Text>
-          </Pressable>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Voice')}>
-            <Text style={styles.navButtonText}>Voice</Text>
-          </Pressable>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Schedule')}>
-            <Text style={styles.navButtonText}>Schedule</Text>
-          </Pressable>
-          <Pressable
-            style={styles.refreshButton}
-            onPress={() => {
-              setIsLoading(true);
-              void loadHistory();
-            }}
-          >
-            <Text style={styles.navButtonText}>Refresh</Text>
-          </Pressable>
-        </View>
+        <VoicePrimaryButton navigation={navigation} />
+
+        <AppNavBar navigation={navigation} currentRoute="History" />
+
+        <Pressable
+          style={styles.refreshButton}
+          onPress={() => {
+            setIsLoading(true);
+            void loadHistory();
+          }}
+        >
+          <Text style={styles.refreshButtonText}>Refresh</Text>
+        </Pressable>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -81,6 +75,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background
   },
+  safeAreaDark: {
+    backgroundColor: '#101D25'
+  },
   container: {
     flex: 1,
     padding: theme.spacing.md
@@ -95,33 +92,19 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     color: theme.colors.textSecondary
   },
-  navRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12
-  },
-  navButton: {
-    flexGrow: 1,
-    flexBasis: '22%',
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.sm,
-    paddingVertical: 9,
-    alignItems: 'center'
-  },
   refreshButton: {
-    flexGrow: 1,
-    flexBasis: '22%',
+    alignSelf: 'flex-start',
     backgroundColor: theme.colors.secondary,
     borderRadius: theme.radius.sm,
     paddingVertical: 9,
-    paddingHorizontal: 10,
+    paddingHorizontal: 14,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    marginBottom: 12
   },
-  navButtonText: {
+  refreshButtonText: {
     color: '#FFFFFF',
-    fontWeight: '700'
+    fontWeight: '800'
   },
   listWrapper: {
     flex: 1

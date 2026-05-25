@@ -10,6 +10,9 @@ import {
   View
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { AppNavBar } from '@/components/AppNavBar';
+import { VoicePrimaryButton } from '@/components/VoicePrimaryButton';
+import { useAppSettings } from '@/context/AppSettingsContext';
 import { RootStackParamList } from '@/navigation/AppNavigator';
 import { controlDevice, DeviceAction, getDeviceState } from '@/services/api/deviceApi';
 import { connectWebSocket } from '@/services/realtime/websocketService';
@@ -21,6 +24,7 @@ import {
   extractRoomDeviceFromDeviceId
 } from '@/services/api/esp32Contract';
 import { theme } from '@/styles/theme';
+import { getDeviceKindLabel, getRoomLabel, ROOM_ORDER } from '@/utils/deviceRooms';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Control'>;
 
@@ -28,6 +32,14 @@ type ControlTarget = {
   room: Esp32Room;
   device: Esp32Device;
   label: string;
+};
+
+type ControlRoomGroup = {
+  room: Esp32Room;
+  label: string;
+  targets: ControlTarget[];
+  onCount: number;
+  totalCount: number;
 };
 
 const GAS_ALERT_THRESHOLD = 1500;
@@ -45,7 +57,25 @@ const DEFAULT_CONTROL_TARGETS: ControlTarget[] = [
   { room: 'hallway', device: 'light', label: 'Hallway light' }
 ];
 
+const groupControlTargetsByRoom = (
+  targets: ControlTarget[],
+  statusByDeviceId: Map<string, string>
+): ControlRoomGroup[] =>
+  ROOM_ORDER.map((room) => {
+    const roomTargets = targets.filter((target) => target.room === room);
+    return {
+      room,
+      label: getRoomLabel(room),
+      targets: roomTargets,
+      onCount: roomTargets.filter(
+        (target) => statusByDeviceId.get(buildDeviceId(target.room, target.device)) === 'ON'
+      ).length,
+      totalCount: roomTargets.length
+    };
+  }).filter((group) => group.totalCount > 0);
+
 export const ControlScreen: React.FC<Props> = ({ navigation }) => {
+  const { isDarkMode } = useAppSettings();
   const [isSending, setIsSending] = useState(false);
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [currentTarget, setCurrentTarget] = useState('Chua co thao tac nao');
@@ -97,6 +127,11 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
 
     return Array.from(uniqueTargets.values());
   }, [snapshot]);
+
+  const controlRoomGroups = useMemo(
+    () => groupControlTargetsByRoom(controlTargets, statusByDeviceId),
+    [controlTargets, statusByDeviceId]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -193,7 +228,7 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, isDarkMode && styles.safeAreaDark]}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.headerRow}>
           <View>
@@ -217,20 +252,9 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
           </Pressable>
         ) : null}
 
-        <View style={styles.navRow}>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Dashboard')}>
-            <Text style={styles.navButtonText}>Dashboard</Text>
-          </Pressable>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Voice')}>
-            <Text style={styles.navButtonText}>Voice</Text>
-          </Pressable>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('History')}>
-            <Text style={styles.navButtonText}>History</Text>
-          </Pressable>
-          <Pressable style={styles.navButton} onPress={() => navigation.navigate('Schedule')}>
-            <Text style={styles.navButtonText}>Schedule</Text>
-          </Pressable>
-        </View>
+        <VoicePrimaryButton navigation={navigation} />
+
+        <AppNavBar navigation={navigation} currentRoute="Control" />
 
         {isSending ? (
           <View style={styles.loadingBox}>
@@ -242,49 +266,78 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
         {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
-        <View style={styles.deviceGrid}>
-          {controlTargets.map((target) => {
-            const deviceId = buildDeviceId(target.room, target.device);
-            const currentStatus = statusByDeviceId.get(deviceId) ?? 'UNKNOWN';
-            const isOn = currentStatus === 'ON';
-
-            return (
-              <View
-                key={`${target.room}-${target.device}`}
-                style={[styles.deviceCard, isOn && styles.deviceCardActive]}
-              >
-                <View style={styles.deviceHeaderRow}>
-                  <View>
-                    <Text style={styles.deviceName}>{target.label}</Text>
-                    <Text style={styles.deviceMeta}>Trang thai: {currentStatus}</Text>
-                  </View>
-                  <View style={[styles.deviceMarker, isOn && styles.deviceMarkerOn]} />
+        <View style={styles.roomControlList}>
+          {controlRoomGroups.map((group) => (
+            <View key={group.room} style={styles.roomControlCard}>
+              <View style={styles.roomHeaderRow}>
+                <View>
+                  <Text style={styles.roomTitle}>{group.label}</Text>
+                  <Text style={styles.roomMeta}>
+                    {group.onCount}/{group.totalCount} thiet bi dang bat
+                  </Text>
                 </View>
-
-                <View style={styles.row}>
-                  <Pressable
-                    style={[styles.actionButton, styles.onButton, isSending && styles.disabledButton]}
-                    disabled={isSending}
-                    onPress={() => {
-                      void handleControl(target.room, target.device, 'ON');
-                    }}
-                  >
-                    <Text style={styles.actionText}>ON</Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={[styles.actionButton, styles.offButton, isSending && styles.disabledButton]}
-                    disabled={isSending}
-                    onPress={() => {
-                      void handleControl(target.room, target.device, 'OFF');
-                    }}
-                  >
-                    <Text style={styles.actionText}>OFF</Text>
-                  </Pressable>
+                <View style={styles.roomCountBadge}>
+                  <Text style={styles.roomCountText}>{group.totalCount}</Text>
                 </View>
               </View>
-            );
-          })}
+
+              <View style={styles.deviceGrid}>
+                {group.targets.map((target) => {
+                  const deviceId = buildDeviceId(target.room, target.device);
+                  const currentStatus = statusByDeviceId.get(deviceId) ?? 'UNKNOWN';
+                  const isOn = currentStatus === 'ON';
+
+                  return (
+                    <View
+                      key={`${target.room}-${target.device}`}
+                      style={[styles.deviceCard, isOn && styles.deviceCardActive]}
+                    >
+                      <View style={styles.deviceHeaderRow}>
+                        <View style={styles.deviceTextBox}>
+                          <Text style={styles.deviceKind}>{getDeviceKindLabel(target.device)}</Text>
+                          <Text style={styles.deviceName} numberOfLines={2}>
+                            {target.label}
+                          </Text>
+                          <Text style={styles.deviceMeta}>Trang thai: {currentStatus}</Text>
+                        </View>
+                        <View style={[styles.deviceMarker, isOn && styles.deviceMarkerOn]} />
+                      </View>
+
+                      <View style={styles.row}>
+                        <Pressable
+                          style={[
+                            styles.actionButton,
+                            styles.onButton,
+                            isSending && styles.disabledButton
+                          ]}
+                          disabled={isSending}
+                          onPress={() => {
+                            void handleControl(target.room, target.device, 'ON');
+                          }}
+                        >
+                          <Text style={styles.actionText}>ON</Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={[
+                            styles.actionButton,
+                            styles.offButton,
+                            isSending && styles.disabledButton
+                          ]}
+                          disabled={isSending}
+                          onPress={() => {
+                            void handleControl(target.room, target.device, 'OFF');
+                          }}
+                        >
+                          <Text style={styles.actionText}>OFF</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
         </View>
       </ScrollView>
 
@@ -318,6 +371,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.background
+  },
+  safeAreaDark: {
+    backgroundColor: '#101D25'
   },
   container: {
     paddingHorizontal: 16,
@@ -410,19 +466,59 @@ const styles = StyleSheet.create({
     color: theme.colors.danger,
     marginBottom: 8
   },
+  roomControlList: {
+    gap: 12
+  },
+  roomControlCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 18,
+    padding: theme.spacing.md
+  },
+  roomHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm
+  },
+  roomTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 19,
+    fontWeight: '900'
+  },
+  roomMeta: {
+    color: theme.colors.textSecondary,
+    marginTop: 3,
+    fontWeight: '600'
+  },
+  roomCountBadge: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E4F8FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10
+  },
+  roomCountText: {
+    color: theme.colors.primary,
+    fontWeight: '900'
+  },
   deviceGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10
   },
   deviceCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FCFE',
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 2,
-    width: '48%'
+    flexGrow: 1,
+    flexBasis: '47%'
   },
   deviceCardActive: {
     backgroundColor: '#DEF6FB',
@@ -432,6 +528,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between'
+  },
+  deviceTextBox: {
+    flex: 1,
+    paddingRight: 8
+  },
+  deviceKind: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 3
   },
   deviceName: {
     fontWeight: '700',
