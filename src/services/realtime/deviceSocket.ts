@@ -18,7 +18,7 @@ export class DeviceSocket {
       return;
     }
 
-    this.socket = new WebSocket(ENV.DEVICE_WS_URL);
+    this.socket = new WebSocket(ENV.BACKEND_WS_URL);
 
     this.socket.onopen = () => {
       this.notifyStatus(true);

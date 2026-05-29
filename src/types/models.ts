@@ -20,6 +20,8 @@ export interface VoiceCommandResult {
   confidence: number;
   entities: Record<string, string | number | boolean>;
   suggestedAction?: string;
+  message?: string;
+  snapshot?: DashboardSnapshot;
 }
 
 export interface ControlCommandPayload {

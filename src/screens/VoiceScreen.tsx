@@ -12,86 +12,17 @@ import { Audio } from 'expo-av';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppNavBar } from '@/components/AppNavBar';
+import { VoiceCommandResultCard } from '@/components/VoiceCommandResultCard';
 import { useAppSettings } from '@/context/AppSettingsContext';
 import { RootStackParamList } from '@/navigation/AppNavigator';
+import { processVoiceCommand } from '@/services/api/voiceApi';
 import { theme } from '@/styles/theme';
+import { DashboardSnapshot, VoiceCommandResult } from '@/types/models';
+import { getDeviceStatusLabel } from '@/utils/deviceRooms';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Voice'>;
 
-type IntentAction = 'on' | 'off';
-type IntentDevice = 'light' | 'fan';
-type IntentLocation = 'living_room' | 'bedroom';
-
-type ParsedIntent = {
-  device: IntentDevice;
-  location: IntentLocation;
-  action: IntentAction;
-};
-
 type StatusType = 'info' | 'success' | 'error';
-
-const SAMPLE_TRANSCRIPTS = ['bật đèn phòng khách', 'tắt quạt phòng ngủ'];
-
-const wait = (ms: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-
-const parseIntent = (text: string): ParsedIntent => {
-  const normalized = text.toLowerCase().trim();
-  const plainText = normalized
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd');
-
-  const isOn = /\bbat\b/.test(plainText);
-  const isOff = /\btat\b/.test(plainText);
-
-  if (isOn === isOff) {
-    throw new Error('Không xác định được hành động bật/tắt từ câu lệnh.');
-  }
-
-  const isLight = /\bden\b/.test(plainText);
-  const isFan = /\bquat\b/.test(plainText);
-
-  if (isLight === isFan) {
-    throw new Error('Không xác định được thiết bị (đèn/quạt).');
-  }
-
-  const isLivingRoom = /phong\s*khach/.test(plainText);
-  const isBedroom = /phong\s*ngu/.test(plainText);
-
-  if (isLivingRoom === isBedroom) {
-    throw new Error('Không xác định được vị trí (phòng khách/phòng ngủ).');
-  }
-
-  return {
-    device: isLight ? 'light' : 'fan',
-    location: isLivingRoom ? 'living_room' : 'bedroom',
-    action: isOn ? 'on' : 'off'
-  };
-};
-
-const mockSpeechToText = async (_audioUri: string): Promise<string> => {
-  await wait(1200);
-  const randomIndex = Math.floor(Math.random() * SAMPLE_TRANSCRIPTS.length);
-  return SAMPLE_TRANSCRIPTS[randomIndex];
-};
-
-const mockSendCommand = async (intent: ParsedIntent): Promise<string> => {
-  await wait(900);
-  const actionText = intent.action === 'on' ? 'bật' : 'tắt';
-  const deviceText = intent.device === 'light' ? 'đèn' : 'quạt';
-  const locationText = intent.location === 'living_room' ? 'phòng khách' : 'phòng ngủ';
-  return `Đã ${actionText} ${deviceText} ${locationText}`;
-};
-
-const formatIntent = (intent: ParsedIntent): string => {
-  const actionText = intent.action === 'on' ? 'Bật' : 'Tắt';
-  const deviceText = intent.device === 'light' ? 'đèn' : 'quạt';
-  const locationText = intent.location === 'living_room' ? 'phòng khách' : 'phòng ngủ';
-  return `${actionText} ${deviceText} ${locationText}`;
-};
 
 export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
   const { isDarkMode } = useAppSettings();
@@ -101,7 +32,8 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
   const [processing, setProcessing] = useState(false);
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [transcript, setTranscript] = useState('');
-  const [intent, setIntent] = useState<ParsedIntent | null>(null);
+  const [result, setResult] = useState<VoiceCommandResult | null>(null);
+  const [updatedSnapshot, setUpdatedSnapshot] = useState<DashboardSnapshot | null>(null);
   const [status, setStatus] = useState('Nhấn giữ nút mic để ghi âm');
   const [statusType, setStatusType] = useState<StatusType>('info');
 
@@ -123,7 +55,8 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
       setStatusType('info');
       setStatus('Đang nghe...');
       setTranscript('');
-      setIntent(null);
+      setResult(null);
+      setUpdatedSnapshot(null);
 
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
@@ -167,17 +100,14 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
       setAudioUri(uri);
       setProcessing(true);
       setStatusType('info');
-      setStatus('Đang xử lý lệnh giọng nói...');
+      setStatus('Đang gửi tệp ghi âm lên máy chủ...');
 
-      const text = await mockSpeechToText(uri);
-      setTranscript(text);
-
-      const parsedIntent = parseIntent(text);
-      setIntent(parsedIntent);
-
-      const commandStatus = await mockSendCommand(parsedIntent);
+      const voiceResult = await processVoiceCommand(uri);
+      setResult(voiceResult);
+      setTranscript(voiceResult.transcript);
+      setUpdatedSnapshot(voiceResult.snapshot ?? null);
       setStatusType('success');
-      setStatus(commandStatus);
+      setStatus(voiceResult.message ?? 'Máy chủ đã xử lý lệnh giọng nói.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Xử lý giọng nói thất bại.';
       setStatusType('error');
@@ -195,7 +125,7 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.caption}>Trợ lý giọng nói</Text>
         <Text style={styles.title}>Điều khiển bằng giọng nói</Text>
-        <Text style={styles.subtitle}>Nhấn giữ nút mic để ghi âm, thả tay để xử lý lệnh.</Text>
+        <Text style={styles.subtitle}>Lệnh giọng nói qua máy chủ AI</Text>
 
         <View style={styles.micFrame}>
           <TouchableOpacity
@@ -211,7 +141,7 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
           >
             <MaterialIcons name={recording ? 'stop' : 'mic'} size={42} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.micHint}>Giữ nút để ghi âm, thả tay để xử lý</Text>
+          <Text style={styles.micHint}>Ghi âm lệnh thiết bị</Text>
         </View>
 
         {processing ? (
@@ -231,9 +161,6 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.label}>Văn bản nhận diện</Text>
           <Text style={styles.value}>{transcript || 'Chưa có văn bản nhận diện'}</Text>
 
-          <Text style={styles.label}>Lệnh đã phân tích</Text>
-          <Text style={styles.value}>{intent ? formatIntent(intent) : 'Chưa phân tích lệnh'}</Text>
-
           <Text style={styles.label}>Trạng thái</Text>
           <Text
             style={[
@@ -245,6 +172,20 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
             {status}
           </Text>
         </View>
+
+        {result ? <VoiceCommandResultCard result={result} /> : null}
+
+        {updatedSnapshot ? (
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Trạng thái sau lệnh</Text>
+            {updatedSnapshot.devices.map((device) => (
+              <View key={device.deviceId} style={styles.deviceRow}>
+                <Text style={styles.deviceName}>{device.name}</Text>
+                <Text style={styles.deviceStatus}>{getDeviceStatusLabel(device.status)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <AppNavBar navigation={navigation} currentRoute="Voice" />
       </ScrollView>
@@ -332,6 +273,12 @@ const styles = StyleSheet.create({
     padding: 14,
     backgroundColor: '#FFFFFF'
   },
+  panelTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 8
+  },
   label: {
     marginTop: 8,
     color: theme.colors.textSecondary,
@@ -340,6 +287,24 @@ const styles = StyleSheet.create({
   value: {
     marginTop: 2,
     color: theme.colors.textPrimary
+  },
+  deviceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    paddingVertical: 9,
+    gap: 10
+  },
+  deviceName: {
+    flex: 1,
+    color: theme.colors.textPrimary,
+    fontWeight: '700'
+  },
+  deviceStatus: {
+    color: theme.colors.primary,
+    fontWeight: '900'
   },
   success: {
     color: theme.colors.success

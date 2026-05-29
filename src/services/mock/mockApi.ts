@@ -10,7 +10,23 @@ let devicesState: DeviceState[] = [...mockDevices];
 
 export const mockProcessVoice = async (): Promise<VoiceCommandResult> => {
   await sleep(800);
-  return mockVoiceResult;
+  devicesState = devicesState.map((device) =>
+    device.deviceId === 'light-living-room'
+      ? { ...device, status: 'on', updatedAt: new Date().toISOString() }
+      : device
+  );
+
+  return {
+    ...mockVoiceResult,
+    snapshot: {
+      ...mockDashboard,
+      devices: devicesState,
+      sensors: {
+        ...mockDashboard.sensors,
+        updatedAt: new Date().toISOString()
+      }
+    }
+  };
 };
 
 export const mockGetDashboardState = async (): Promise<DashboardSnapshot> => {

@@ -13,15 +13,11 @@ import {
   Esp32Room
 } from '@/services/api/esp32Contract';
 
-// Luu y quan trong:
-// - Khong sua truc tiep IP/mode trong file nay neu khong can.
-// - Su dung src/config/env.ts lam noi cau hinh chinh.
-// - BASE_URL va USE_MOCK duoc map tu ENV de tranh lech cau hinh giua cac service.
-export const BASE_URL = ENV.ESP32_BASE_URL;
+// Mobile chỉ nói chuyện với backend trung gian.
+// Backend chịu trách nhiệm kết nối ESP32, ghi history và trả snapshot trạng thái mới nhất.
+export const BASE_URL = ENV.BACKEND_BASE_URL;
 export const USE_MOCK = ENV.USE_MOCKS;
 
-// Mock data duoc giu lai nhu che do du phong.
-// Khi chay data that, app se bo qua block nay va goi truc tiep ESP32.
 export const MOCK_DEVICE_STATE: DashboardSnapshot = {
   devices: [
     {
@@ -93,15 +89,26 @@ export const MOCK_DEVICE_STATE: DashboardSnapshot = {
   }
 };
 
-const deviceApi = axios.create({
-  baseURL: BASE_URL,
-  timeout: 5000
-});
+export type DeviceAction = 'ON' | 'OFF';
+
+export interface ControlDeviceResponse {
+  success: boolean;
+  room: string;
+  device: string;
+  action: DeviceAction;
+  message: string;
+  timestamp: string;
+  snapshot?: DashboardSnapshot;
+  updatedDevice?: DeviceState;
+}
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
 
 const cloneMockState = (): DashboardSnapshot => ({
   devices: MOCK_DEVICE_STATE.devices.map((device) => ({ ...device })),
@@ -127,16 +134,38 @@ const parseAxiosError = (error: unknown): string => {
   return `Lỗi mạng: ${detail}`;
 };
 
-export type DeviceAction = 'ON' | 'OFF';
+export const extractDashboardSnapshot = (payload: unknown): DashboardSnapshot | null => {
+  const candidates: unknown[] = [payload];
 
-export interface ControlDeviceResponse {
-  success: boolean;
-  room: string;
-  device: string;
-  action: DeviceAction;
-  message: string;
-  timestamp: string;
-}
+  if (isObject(payload)) {
+    candidates.push(
+      payload.data,
+      payload.snapshot,
+      payload.dashboard,
+      payload.dashboardState,
+      payload.state,
+      payload.devices && payload.sensors ? payload : undefined
+    );
+
+    if (isObject(payload.result)) {
+      candidates.push(payload.result.snapshot, payload.result.dashboard, payload.result.state);
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    try {
+      return mapStatePayloadToDashboardSnapshot(candidate);
+    } catch {
+      // Backend có thể trả kèm metadata, thử candidate tiếp theo.
+    }
+  }
+
+  return null;
+};
 
 const toDeviceStatus = (action: DeviceAction): 'on' | 'off' => (action === 'ON' ? 'on' : 'off');
 
@@ -144,6 +173,39 @@ const getActionLabel = (action: DeviceAction): string => (action === 'ON' ? 'b�
 
 const toSentenceDeviceName = (name: string): string =>
   name ? name.charAt(0).toLocaleLowerCase('vi-VN') + name.slice(1) : name;
+
+const getServerMessage = (payload: unknown, fallback: string): string => {
+  if (!isObject(payload)) {
+    return fallback;
+  }
+
+  return typeof payload.message === 'string' && payload.message.trim()
+    ? payload.message.trim()
+    : fallback;
+};
+
+const findDeviceInPayload = (
+  payload: unknown,
+  targetDeviceId: string,
+  snapshot: DashboardSnapshot | null
+): DeviceState | undefined => {
+  const fromSnapshot = snapshot?.devices.find((device) => device.deviceId === targetDeviceId);
+  if (fromSnapshot) {
+    return fromSnapshot;
+  }
+
+  if (!isObject(payload)) {
+    return undefined;
+  }
+
+  const candidates = [payload.device, payload.updatedDevice, payload.deviceState];
+  return candidates.find(
+    (candidate): candidate is DeviceState =>
+      isObject(candidate) &&
+      candidate.deviceId === targetDeviceId &&
+      (candidate.status === 'on' || candidate.status === 'off')
+  );
+};
 
 const applyMockControl = (
   room: Esp32Room,
@@ -170,66 +232,85 @@ const applyMockControl = (
   return { ...created };
 };
 
-const sendEsp32ControlCommand = async (
+const createMockControlResponse = (
   room: Esp32Room,
   device: Esp32Device,
   action: DeviceAction
-): Promise<void> => {
-  const params = { room, device, action };
+): ControlDeviceResponse => {
+  const updated = applyMockControl(room, device, action);
+  const snapshot = cloneMockState();
 
+  return {
+    success: true,
+    room,
+    device,
+    action,
+    message: `[Mẫu] Đã ${getActionLabel(action)} ${toSentenceDeviceName(updated.name)}.`,
+    timestamp: new Date().toISOString(),
+    snapshot,
+    updatedDevice: updated
+  };
+};
+
+const callBackendControl = async (
+  payload: Record<string, string>
+): Promise<ControlDeviceResponse> => {
   try {
-    // Thu POST truoc vi mot so firmware map /control theo POST.
-    await deviceApi.post(API_PATHS.control, undefined, { params });
-    return;
-  } catch (postError: unknown) {
-    // Fallback GET cho firmware ESP32 phien ban chi support query GET.
-    try {
-      await deviceApi.get(API_PATHS.control, { params });
-      return;
-    } catch (getError: unknown) {
-      const postDetail = parseAxiosError(postError);
-      const getDetail = parseAxiosError(getError);
-      throw new Error(`POST thất bại (${postDetail}); GET thất bại (${getDetail})`);
-    }
+    const response = await backendClient.post<unknown>(API_PATHS.deviceControl, payload);
+    const snapshot = extractDashboardSnapshot(response.data);
+    const roomValue = normalizeRoomInput(payload.room ?? '');
+    const deviceValue = normalizeDeviceInput(payload.device ?? '');
+    const action = payload.action as DeviceAction;
+    const targetDeviceId = buildDeviceId(roomValue, deviceValue);
+    const updatedDevice = findDeviceInPayload(response.data, targetDeviceId, snapshot);
+
+    return {
+      success: true,
+      room: roomValue,
+      device: deviceValue,
+      action,
+      message: getServerMessage(
+        response.data,
+        `Đã gửi lệnh ${getActionLabel(action)} cho ${toSentenceDeviceName(buildDeviceName(roomValue, deviceValue))}.`
+      ),
+      timestamp: new Date().toISOString(),
+      snapshot: snapshot ?? undefined,
+      updatedDevice
+    };
+  } catch (error: unknown) {
+    const detail = error instanceof Error ? error.message : parseAxiosError(error);
+    console.error('[controlDevice] Lỗi gửi lệnh tới server trung gian', {
+      baseURL: BASE_URL,
+      apiPath: API_PATHS.deviceControl,
+      payload,
+      detail,
+      suggestion: 'Kiểm tra endpoint control của backend, kết nối backend tới ESP32 và schema response.'
+    });
+    throw new Error(`Không thể điều khiển thiết bị qua server. ${detail}`);
   }
 };
 
 const controlDeviceWithPayload = async (
   payload: ControlCommandPayload
-): Promise<DeviceState> => {
-  if (USE_MOCK) {
-    const parsed = extractRoomDeviceFromDeviceId(payload.deviceId);
-    if (!parsed) {
-      throw new Error(`Không ánh xạ được deviceId sang phòng/thiết bị: ${payload.deviceId}`);
-    }
-
-    return applyMockControl(parsed.room, parsed.device, payload.action === 'on' ? 'ON' : 'OFF');
-  }
-
+): Promise<ControlDeviceResponse> => {
   const parsed = extractRoomDeviceFromDeviceId(payload.deviceId);
   if (!parsed) {
     throw new Error(`Không ánh xạ được deviceId sang phòng/thiết bị: ${payload.deviceId}`);
   }
 
-  try {
-    await sendEsp32ControlCommand(parsed.room, parsed.device, payload.action.toUpperCase() as DeviceAction);
+  const action = payload.action === 'on' ? 'ON' : 'OFF';
 
-    return {
-      deviceId: buildDeviceId(parsed.room, parsed.device),
-      name: buildDeviceName(parsed.room, parsed.device),
-      status: payload.action,
-      updatedAt: new Date().toISOString()
-    };
-  } catch (error: unknown) {
-    const detail = error instanceof Error ? error.message : parseAxiosError(error);
-    console.error('[controlDevice(payload)] Loi goi /control', {
-      baseURL: BASE_URL,
-      payload,
-      detail,
-      suggestion: 'Kiểm tra deviceId, action, endpoint /control và phương thức HTTP firmware hỗ trợ (POST/GET).'
-    });
-    throw new Error(`Không thể điều khiển thiết bị. ${detail}`);
+  if (USE_MOCK) {
+    await sleep(500);
+    return createMockControlResponse(parsed.room, parsed.device, action);
   }
+
+  return callBackendControl({
+    deviceId: payload.deviceId,
+    room: parsed.room,
+    device: parsed.device,
+    action
+  });
 };
 
 const controlDeviceWithRoomDevice = async (
@@ -241,94 +322,57 @@ const controlDeviceWithRoomDevice = async (
   const deviceValue = normalizeDeviceInput(device);
 
   if (USE_MOCK) {
-    // Mock mode: gia lap goi API bang Promise + setTimeout de test loading UI.
     await sleep(800);
-    const updated = applyMockControl(roomValue, deviceValue, action);
-
-    return new Promise((resolve) => {
-      resolve({
-        success: true,
-        room: roomValue,
-        device: deviceValue,
-        action,
-        message: `[Mẫu] Đã ${getActionLabel(action)} ${toSentenceDeviceName(updated.name)}.`,
-        timestamp: new Date().toISOString()
-      });
-    });
+    return createMockControlResponse(roomValue, deviceValue, action);
   }
 
-  try {
-    // ESP32 firmware hien tai doc query param room/device/action o /control.
-    // Service se thu POST truoc, neu firmware khong support thi fallback GET.
-    await sendEsp32ControlCommand(roomValue, deviceValue, action);
-
-    return {
-      success: true,
-      room: roomValue,
-      device: deviceValue,
-      action,
-      message: `Đã gửi lệnh ${getActionLabel(action)} cho ${toSentenceDeviceName(buildDeviceName(roomValue, deviceValue))}.`,
-      timestamp: new Date().toISOString()
-    };
-  } catch (error: unknown) {
-    const detail = error instanceof Error ? error.message : parseAxiosError(error);
-    console.error('[controlDevice(room,device,action)] Loi goi /control', {
-      baseURL: BASE_URL,
-      payload: { room: roomValue, device: deviceValue, action },
-      detail,
-      suggestion: 'Kiểm tra IP ESP32, endpoint /control, kết nối mạng và phương thức firmware hỗ trợ (POST/GET).'
-    });
-    throw new Error(`Không thể điều khiển thiết bị. ${detail}`);
-  }
+  return callBackendControl({
+    deviceId: buildDeviceId(roomValue, deviceValue),
+    room: roomValue,
+    device: deviceValue,
+    action
+  });
 };
 
-// Ham nay la API chinh cho Dashboard:
-// - USE_MOCK = true  -> tra mock data.
-// - USE_MOCK = false -> goi API that GET /state.
-// Cach test nhanh:
-// - Mock: doi ENV.USE_MOCKS = true trong src/config/env.ts va mo man hinh Dashboard.
-// - Real: doi ENV.USE_MOCKS = false, mo trinh duyet BASE_URL + '/state' de kiem tra JSON truoc.
 export const getDeviceState = async (): Promise<DashboardSnapshot> => {
   if (USE_MOCK) {
     return cloneMockState();
   }
 
   try {
-    const response = await deviceApi.get<unknown>(API_PATHS.state);
-    return mapStatePayloadToDashboardSnapshot(response.data);
+    const response = await backendClient.get<unknown>(API_PATHS.deviceState);
+    const snapshot = extractDashboardSnapshot(response.data);
+
+    if (!snapshot) {
+      throw new Error('Server không trả về snapshot trạng thái thiết bị hợp lệ.');
+    }
+
+    return snapshot;
   } catch (error: unknown) {
-    const detail = parseAxiosError(error);
-    console.error('[getDeviceState] Loi goi /state', {
+    const detail = error instanceof Error ? error.message : parseAxiosError(error);
+    console.error('[getDeviceState] Lỗi lấy trạng thái thiết bị từ server', {
       baseURL: BASE_URL,
+      apiPath: API_PATHS.deviceState,
       detail,
-      suggestion: 'Kiểm tra IP, cùng mạng Wi-Fi, endpoint /state và trạng thái ESP32.'
+      suggestion: 'Kiểm tra endpoint state của backend và kết nối backend tới ESP32.'
     });
-    throw new Error(`Không thể lấy dữ liệu /state. ${detail}`);
+    throw new Error(`Không thể lấy trạng thái thiết bị từ server. ${detail}`);
   }
 };
 
-// Giu lai ham nay de tuong thich code cu.
 export const getDashboardState = async (): Promise<DashboardSnapshot> => getDeviceState();
 
-// Ham nay dung de dieu khien thiet bi.
-// Cach chuyen mock/real API:
-// - Doi ENV.USE_MOCKS trong src/config/env.ts.
-// - true  -> gia lap API (de test UI, an toan khi chua co backend that).
-// - false -> goi API that POST /control.
-// Luu y: de khong vo code cu, ham nay ho tro ca 2 kieu goi:
-// 1) controlDevice(room, device, action)
-// 2) controlDevice({ deviceId, action })
 export function controlDevice(
   room: string,
   device: string,
   action: DeviceAction
 ): Promise<ControlDeviceResponse>;
-export function controlDevice(payload: ControlCommandPayload): Promise<DeviceState>;
+export function controlDevice(payload: ControlCommandPayload): Promise<ControlDeviceResponse>;
 export async function controlDevice(
   roomOrPayload: string | ControlCommandPayload,
   device?: string,
   action?: DeviceAction
-): Promise<ControlDeviceResponse | DeviceState> {
+): Promise<ControlDeviceResponse> {
   if (typeof roomOrPayload !== 'string') {
     return controlDeviceWithPayload(roomOrPayload);
   }
@@ -340,22 +384,5 @@ export async function controlDevice(
   return controlDeviceWithRoomDevice(roomOrPayload, device, action);
 }
 
-export const triggerBackendCommandLog = async (
-  payload: ControlCommandPayload
-): Promise<void> => {
-  if (USE_MOCK) {
-    return;
-  }
-
-  try {
-    await backendClient.post('/api/history/log', payload);
-  } catch (error: unknown) {
-    const detail = parseAxiosError(error);
-    console.error('[triggerBackendCommandLog] Lỗi gửi log lịch sử', {
-      payload,
-      detail,
-      suggestion: 'Kiểm tra backend endpoint /api/history/log và kết nối mạng.'
-    });
-    throw new Error(`Không thể ghi log lịch sử lên máy chủ. ${detail}`);
-  }
-};
+// Giữ hàm này để code cũ không vỡ; backend control mới sẽ tự ghi history.
+export const triggerBackendCommandLog = async (): Promise<void> => undefined;

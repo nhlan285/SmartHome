@@ -12,12 +12,10 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let mockInterval: ReturnType<typeof setInterval> | null = null;
 let isManualDisconnect = false;
 
-const WS_URL = ENV.DEVICE_WS_URL;
+const WS_URL = ENV.BACKEND_WS_URL;
 
-// Neu can doi URL websocket, uu tien doi trong src/config/env.ts:
-// - ENV.DEVICE_WS_URL
-// Command test websocket nhanh (ngoai app):
-// - npx wscat -c ws://<ESP32_IP>:81
+// Mobile chỉ kết nối WebSocket realtime từ server trung gian.
+// Nếu backend chưa có WebSocket, các màn hình vẫn tải dữ liệu bằng REST.
 
 const emitData = (data: DashboardSnapshot): void => {
   listeners.forEach((callback) => {
@@ -66,8 +64,7 @@ const startMockWebSocket = (): void => {
     return;
   }
 
-  // Mock websocket la mo phong server gui du lieu realtime dinh ky.
-  // Muc dich: test luong realtime truoc khi co ESP32 that.
+  // Mock websocket mô phỏng server gửi dữ liệu realtime định kỳ.
   mockInterval = setInterval(() => {
     emitData(createMockRealtimeData());
   }, 3000);
@@ -87,7 +84,7 @@ const connectRealWebSocket = (): void => {
       const snapshot = mapStatePayloadToDashboardSnapshot(parsed);
       emitData(snapshot);
     } catch (error) {
-      console.error('[connectWebSocket] JSON parse loi', {
+      console.error('[connectWebSocket] Lỗi parse JSON realtime', {
         rawData: event.data,
         error
       });
@@ -107,7 +104,7 @@ const connectRealWebSocket = (): void => {
   };
 
   socket.onerror = (error) => {
-    console.error('[connectWebSocket] Loi ket noi websocket', {
+    console.error('[connectWebSocket] Lỗi kết nối WebSocket server', {
       wsUrl: WS_URL,
       error
     });
@@ -128,10 +125,9 @@ export const disconnectWebSocket = (): void => {
 export const connectWebSocket = (callback: WebSocketCallback): (() => void) => {
   listeners.add(callback);
 
-  // Cach chuyen sang ESP32 that:
-  // 1) Dat ENV.USE_MOCKS = false trong src/config/env.ts.
-  // 2) Kiem tra ENV.ESP32_BASE_URL dung IP LAN cua ESP32.
-  // 3) Service se ket noi ws://<IP>:81 tu dong.
+  // Khi dùng server thật:
+  // 1) Đặt ENV.USE_MOCKS = false trong src/config/env.ts.
+  // 2) Cấu hình ENV.BACKEND_WS_URL về WebSocket của server.
   if (USE_MOCK) {
     startMockWebSocket();
   } else {

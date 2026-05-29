@@ -41,7 +41,9 @@ export const mockVoiceResult: VoiceCommandResult = {
     deviceId: 'light-living-room',
     action: 'on'
   },
-  suggestedAction: 'Bật đèn phòng khách'
+  suggestedAction: 'Bật đèn phòng khách',
+  message: 'Server mẫu đã xử lý lệnh giọng nói.',
+  snapshot: mockDashboard
 };
 
 export const mockHistory: ControlHistoryItem[] = [

@@ -45,9 +45,8 @@ type ControlRoomGroup = {
 
 const GAS_ALERT_THRESHOLD = 1500;
 
-// UI nay khong dung mock data truc tiep.
-// Toan bo lenh dieu khien deu di qua service controlDevice(...)
-// de de dang chuyen giua mock mode va real API mode tai 1 diem duy nhat.
+// UI không gọi phần cứng trực tiếp.
+// Toàn bộ lệnh điều khiển đi qua service controlDevice(...), rồi service gửi lên server.
 const DEFAULT_CONTROL_TARGETS: ControlTarget[] = [
   { room: 'living', device: 'light', label: 'Đèn phòng khách' },
   { room: 'living', device: 'fan', label: 'Quạt phòng khách' },
@@ -189,11 +188,7 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
     });
   };
 
-  // Luong dieu khien:
-  // 1) Nguoi dung bam ON/OFF.
-  // 2) UI goi service controlDevice(room, device, action).
-  // 3) Hien loading trong luc gui request.
-  // 4) Hien message thanh cong hoac loi.
+  // Luồng điều khiển: người dùng bấm nút -> mobile gửi lệnh lên server -> server trả snapshot mới.
   const handleControl = async (
     room: Esp32Room,
     device: Esp32Device,
@@ -208,15 +203,16 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const result = await controlDevice(room, device, action);
       setSuccessMessage(result.message);
-      syncLocalStatus(room, device, action);
+      if (result.snapshot) {
+        setSnapshot(result.snapshot);
+      } else {
+        syncLocalStatus(room, device, action);
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Gửi lệnh thất bại.';
       setErrorMessage(message);
 
-      // Debug nhanh khi API loi:
-      // - Kiem tra USE_MOCK trong deviceApi.ts.
-      // - Neu USE_MOCK=false, kiem tra IP ESP32 va endpoint /control.
-      // - Kiem tra dien thoai/emulator co cung mang voi server hay khong.
+      // Debug nhanh khi API lỗi: kiểm tra BACKEND_BASE_URL và endpoint /api/devices/control.
       console.error('[ControlScreen] Lỗi điều khiển thiết bị', {
         room,
         device,

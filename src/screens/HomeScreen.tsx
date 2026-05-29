@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { DeviceCard } from '@/components/DeviceCard';
 import { SensorPanel } from '@/components/SensorPanel';
-import { controlDevice, getDashboardState, triggerBackendCommandLog } from '@/services/api/deviceApi';
+import { controlDevice, getDashboardState } from '@/services/api/deviceApi';
 import { useDeviceSocket } from '@/hooks/useDeviceSocket';
 import { DashboardSnapshot, DeviceState } from '@/types/models';
 import { theme } from '@/styles/theme';
@@ -57,21 +57,27 @@ export const HomeScreen: React.FC = () => {
     setPendingDeviceId(device.deviceId);
 
     try {
-      const updated = await controlDevice({ deviceId: device.deviceId, action: nextAction });
+      const result = await controlDevice({ deviceId: device.deviceId, action: nextAction });
       setSnapshot((current) => {
         if (!current) {
+          return result.snapshot ?? current;
+        }
+
+        if (result.snapshot) {
+          return result.snapshot;
+        }
+
+        if (!result.updatedDevice) {
           return current;
         }
 
         return {
           ...current,
           devices: current.devices.map((item) =>
-            item.deviceId === updated.deviceId ? updated : item
+            item.deviceId === result.updatedDevice?.deviceId ? result.updatedDevice : item
           )
         };
       });
-
-      await triggerBackendCommandLog({ deviceId: updated.deviceId, action: updated.status });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Không thể điều khiển thiết bị.';
       setError(message);
