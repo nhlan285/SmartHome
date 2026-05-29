@@ -2,32 +2,76 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { VoiceCommandResult } from '@/types/models';
 import { theme } from '@/styles/theme';
+import { buildDeviceName, extractRoomDeviceFromDeviceId } from '@/services/api/esp32Contract';
 
 interface VoiceCommandResultCardProps {
   result: VoiceCommandResult;
 }
 
+const ENTITY_LABELS: Record<string, string> = {
+  action: 'Hành động',
+  device: 'Thiết bị',
+  deviceId: 'Thiết bị',
+  location: 'Vị trí',
+  room: 'Phòng'
+};
+
+const getIntentLabel = (intent: string): string => {
+  if (intent === 'device_control') {
+    return 'Điều khiển thiết bị';
+  }
+
+  return intent;
+};
+
+const formatEntityValue = (key: string, value: string | number | boolean): string => {
+  if (key === 'action') {
+    if (value === 'on' || value === 'ON' || value === true) {
+      return 'Bật';
+    }
+
+    if (value === 'off' || value === 'OFF' || value === false) {
+      return 'Tắt';
+    }
+  }
+
+  if (key === 'deviceId' && typeof value === 'string') {
+    const parsed = extractRoomDeviceFromDeviceId(value);
+    return parsed ? buildDeviceName(parsed.room, parsed.device) : value;
+  }
+
+  return String(value);
+};
+
+const formatEntities = (entities: VoiceCommandResult['entities']): string =>
+  Object.entries(entities)
+    .map(([key, value]) => {
+      const label = ENTITY_LABELS[key] ?? key;
+      return `${label}: ${formatEntityValue(key, value)}`;
+    })
+    .join('\n');
+
 export const VoiceCommandResultCard: React.FC<VoiceCommandResultCardProps> = ({ result }) => (
   <View style={styles.card}>
-    <Text style={styles.title}>Recognized Result</Text>
-    <Text style={styles.label}>Transcript</Text>
+    <Text style={styles.title}>Kết quả nhận diện</Text>
+    <Text style={styles.label}>Văn bản nhận diện</Text>
     <Text style={styles.value}>{result.transcript}</Text>
 
     <View style={styles.row}>
       <View style={styles.chip}>
-        <Text style={styles.chipText}>Intent: {result.intent}</Text>
+        <Text style={styles.chipText}>Ý định: {getIntentLabel(result.intent)}</Text>
       </View>
       <View style={styles.chip}>
-        <Text style={styles.chipText}>Confidence: {(result.confidence * 100).toFixed(1)}%</Text>
+        <Text style={styles.chipText}>Độ tin cậy: {(result.confidence * 100).toFixed(1)}%</Text>
       </View>
     </View>
 
-    <Text style={styles.label}>Entities</Text>
-    <Text style={styles.entityText}>{JSON.stringify(result.entities, null, 2)}</Text>
+    <Text style={styles.label}>Thông tin trích xuất</Text>
+    <Text style={styles.entityText}>{formatEntities(result.entities)}</Text>
 
     {result.suggestedAction ? (
       <>
-        <Text style={styles.label}>Suggested Action</Text>
+        <Text style={styles.label}>Hành động đề xuất</Text>
         <Text style={styles.value}>{result.suggestedAction}</Text>
       </>
     ) : null}

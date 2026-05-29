@@ -14,7 +14,7 @@ export const esp32Client = axios.create({
 backendClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    const message = error?.response?.data?.message || 'Backend request failed';
+    const message = error?.response?.data?.message || 'Yêu cầu máy chủ thất bại';
     return Promise.reject(new Error(message));
   }
 );
@@ -22,7 +22,7 @@ backendClient.interceptors.response.use(
 esp32Client.interceptors.response.use(
   (response) => response,
   (error) => {
-    const message = error?.response?.data?.message || 'Device request failed';
+    const message = error?.response?.data?.message || 'Yêu cầu thiết bị thất bại';
     return Promise.reject(new Error(message));
   }
 );

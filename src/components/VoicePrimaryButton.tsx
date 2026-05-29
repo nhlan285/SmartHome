@@ -16,7 +16,7 @@ export function VoicePrimaryButton<RouteName extends AppRouteName>({
 }: VoicePrimaryButtonProps<RouteName>): React.ReactElement {
   return (
     <Pressable
-      accessibilityLabel="Voice control"
+      accessibilityLabel="Điều khiển giọng nói"
       accessibilityRole="button"
       style={styles.button}
       onPress={() => navigation.navigate('Voice')}
@@ -25,8 +25,8 @@ export function VoicePrimaryButton<RouteName extends AppRouteName>({
         <MaterialIcons name="mic" size={34} color="#FFFFFF" />
       </View>
       <View style={styles.textBox}>
-        <Text style={styles.label}>Voice Control</Text>
-        <Text style={styles.meta}>AI Command Center</Text>
+        <Text style={styles.label}>Điều khiển giọng nói</Text>
+        <Text style={styles.meta}>Trung tâm lệnh AI</Text>
       </View>
       <MaterialIcons name="arrow-forward-ios" size={18} color="#FFFFFF" />
     </Pressable>
@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: '#FFFFFF',
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: '900'
   },
   meta: {

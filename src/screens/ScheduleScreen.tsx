@@ -64,24 +64,24 @@ const createFormFromSchedule = (schedule: LightSchedule): LightScheduleDraft => 
 
 const formatHardwareStatus = (status?: DeviceState['status']): string => {
   if (status === 'on') {
-    return 'ON';
+    return 'Bật';
   }
 
   if (status === 'off') {
-    return 'OFF';
+    return 'Tắt';
   }
 
-  return 'UNKNOWN';
+  return 'Không rõ';
 };
 
 const getAllLightsStatusText = (targets: HardwareLightTarget[]): string => {
   if (targets.length === 0) {
-    return 'Dang cho ESP32';
+    return 'Đang chờ ESP32';
   }
 
   const onCount = targets.filter((item) => item.device.status === 'on').length;
   const offCount = targets.length - onCount;
-  return `${onCount} ON / ${offCount} OFF`;
+  return `${onCount} bật / ${offCount} tắt`;
 };
 
 export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
@@ -123,7 +123,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
         }
       } catch (error: unknown) {
         if (isMounted) {
-          const message = error instanceof Error ? error.message : 'Khong the tai du lieu ESP32.';
+          const message = error instanceof Error ? error.message : 'Không thể tải dữ liệu ESP32.';
           setDeviceStateError(message);
         }
       } finally {
@@ -159,7 +159,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
 
       uniqueTargets.set(parsed.room, {
         target: parsed.room,
-        label: device.name || getScheduleTargetLabel(parsed.room),
+        label: getScheduleTargetLabel(parsed.room),
         device
       });
     });
@@ -179,7 +179,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
         : LIGHT_SCHEDULE_TARGETS.filter((target) => target !== 'all').map((target) => ({
             target,
             label: getScheduleTargetLabel(target),
-            statusText: 'Dang cho ESP32',
+            statusText: 'Đang chờ ESP32',
             isAvailable: false
           }));
 
@@ -187,7 +187,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
       ...roomOptions,
       {
         target: 'all',
-        label: 'Tat ca den',
+        label: 'Tất cả đèn',
         statusText: getAllLightsStatusText(hardwareLightTargets),
         isAvailable: hardwareLightTargets.length > 0
       }
@@ -212,7 +212,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
       labelMap.set(item.target, item.label);
     });
 
-    labelMap.set('all', 'Tat ca den');
+    labelMap.set('all', 'Tất cả đèn');
     return labelMap;
   }, [hardwareLightTargets]);
 
@@ -221,7 +221,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
 
   const getLiveTargetStatus = (target: LightScheduleTarget): string =>
     targetStatusByTarget.get(target) ??
-    (isDeviceStateLoading ? 'Dang dong bo ESP32' : 'Khong thay trong ESP32');
+    (isDeviceStateLoading ? 'Đang đồng bộ ESP32' : 'Không thấy trong ESP32');
 
   const getLiveScheduleSummary = (schedule: LightSchedule): string =>
     `${getScheduleActionLabel(schedule.action)} - ${getLiveTargetLabel(schedule.target)}`;
@@ -266,7 +266,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
 
       closeForm();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Khong the luu lich hen gio.';
+      const message = error instanceof Error ? error.message : 'Không thể lưu lịch hẹn giờ.';
       setFormError(message);
     }
   };
@@ -277,7 +277,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
       setRunningScheduleId(scheduleId);
       await runScheduleNow(scheduleId);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Chay lich that bai.';
+      const message = error instanceof Error ? error.message : 'Chạy lịch thất bại.';
       setScreenError(message);
     } finally {
       setRunningScheduleId(null);
@@ -285,10 +285,10 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const confirmDeleteSchedule = (schedule: LightSchedule): void => {
-    Alert.alert('Xoa lich hen gio', `Ban muon xoa lich "${schedule.title}"?`, [
-      { text: 'Huy', style: 'cancel' },
+    Alert.alert('Xóa lịch hẹn giờ', `Bạn muốn xóa lịch "${schedule.title}"?`, [
+      { text: 'Hủy', style: 'cancel' },
       {
-        text: 'Xoa',
+        text: 'Xóa',
         style: 'destructive',
         onPress: () => deleteSchedule(schedule.id)
       }
@@ -296,10 +296,10 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const confirmResetSchedules = (): void => {
-    Alert.alert('Khoi phuc lich mau', 'Thay toan bo lich hien tai bang 4 lich mau ban dau?', [
-      { text: 'Huy', style: 'cancel' },
+    Alert.alert('Khôi phục lịch mẫu', 'Thay toàn bộ lịch hiện tại bằng 4 lịch mẫu ban đầu?', [
+      { text: 'Hủy', style: 'cancel' },
       {
-        text: 'Khoi phuc',
+        text: 'Khôi phục',
         onPress: resetSchedules
       }
     ]);
@@ -314,46 +314,46 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.headerRow}>
           <View style={styles.headerTextBox}>
-            <Text style={styles.caption}>Timer Mode</Text>
-            <Text style={styles.title}>Light Schedule</Text>
+            <Text style={styles.caption}>Chế độ hẹn giờ</Text>
+            <Text style={styles.title}>Lịch bật đèn</Text>
           </View>
           <Pressable style={styles.addButton} onPress={openCreateForm}>
-            <Text style={styles.addButtonText}>+ Them</Text>
+            <Text style={styles.addButtonText}>+ Thêm</Text>
           </Pressable>
         </View>
 
         <View style={styles.statusCard}>
           <View style={styles.statusTopRow}>
             <View>
-              <Text style={styles.statusLabel}>Scheduler</Text>
+              <Text style={styles.statusLabel}>Bộ hẹn giờ</Text>
               <Text style={styles.statusValue}>
-                {isSchedulerEnabled ? 'Dang bat' : 'Dang tam dung'}
+                {isSchedulerEnabled ? 'Đang bật' : 'Đang tạm dừng'}
               </Text>
             </View>
             <Pressable
               style={[styles.masterToggle, isSchedulerEnabled ? styles.masterOn : styles.masterOff]}
               onPress={toggleScheduler}
             >
-              <Text style={styles.masterToggleText}>{isSchedulerEnabled ? 'ON' : 'OFF'}</Text>
+              <Text style={styles.masterToggleText}>{isSchedulerEnabled ? 'Bật' : 'Tắt'}</Text>
             </Pressable>
           </View>
 
-          <Text style={styles.statusLabel}>Du lieu</Text>
+          <Text style={styles.statusLabel}>Dữ liệu</Text>
           <Text style={styles.statusMessage}>
-            {isStoreReady ? 'Da luu local tren may' : 'Dang doc lich hen gio...'}
+            {isStoreReady ? 'Đã lưu cục bộ trên máy' : 'Đang đọc lịch hẹn giờ...'}
           </Text>
 
           <Text style={styles.statusLabel}>ESP32</Text>
           <Text style={[styles.statusMessage, deviceStateError ? styles.statusMessageError : null]}>
             {deviceStateError ||
-              (isDeviceStateLoading ? 'Dang dong bo phan cung...' : `Realtime luc ${hardwareUpdatedAt}`)}
+              (isDeviceStateLoading ? 'Đang đồng bộ phần cứng...' : `Thời gian thực lúc ${hardwareUpdatedAt}`)}
           </Text>
 
-          <Text style={styles.statusLabel}>Lan chay gan nhat</Text>
+          <Text style={styles.statusLabel}>Lần chạy gần nhất</Text>
           <Text style={styles.statusMessage}>{lastRunMessage}</Text>
 
           <Pressable style={styles.resetButton} onPress={confirmResetSchedules}>
-            <Text style={styles.resetButtonText}>Khoi phuc 4 lich mau</Text>
+            <Text style={styles.resetButtonText}>Khôi phục 4 lịch mẫu</Text>
           </Pressable>
         </View>
 
@@ -366,8 +366,8 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
 
         {schedules.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyTitle}>Chua co lich hen gio</Text>
-            <Text style={styles.emptyText}>Bam + Them de tao lich bat/tat den moi.</Text>
+            <Text style={styles.emptyTitle}>Chưa có lịch hẹn giờ</Text>
+            <Text style={styles.emptyText}>Bấm + Thêm để tạo lịch bật/tắt đèn mới.</Text>
           </View>
         ) : null}
 
@@ -383,14 +383,14 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
                 <View style={styles.scheduleTopRow}>
                   <View style={styles.timeBox}>
                     <Text style={styles.timeText}>{schedule.time}</Text>
-                    <Text style={styles.timeStatus}>{schedule.enabled ? 'Active' : 'Paused'}</Text>
+                    <Text style={styles.timeStatus}>{schedule.enabled ? 'Kích hoạt' : 'Tạm dừng'}</Text>
                   </View>
 
                   <View style={styles.scheduleInfo}>
                     <Text style={styles.scheduleTitle}>{schedule.title}</Text>
                     <Text style={styles.scheduleMeta}>{getLiveScheduleSummary(schedule)}</Text>
                     <Text style={styles.scheduleLiveStatus}>
-                      Phan cung: {getLiveTargetStatus(schedule.target)}
+                      Phần cứng: {getLiveTargetStatus(schedule.target)}
                     </Text>
                   </View>
 
@@ -415,19 +415,19 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
                     onPress={() => toggleSchedule(schedule.id)}
                   >
                     <Text style={styles.smallButtonText}>
-                      {schedule.enabled ? 'Tam dung' : 'Kich hoat'}
+                      {schedule.enabled ? 'Tạm dừng' : 'Kích hoạt'}
                     </Text>
                   </Pressable>
 
                   <Pressable style={styles.smallButton} onPress={() => openEditForm(schedule)}>
-                    <Text style={styles.smallButtonText}>Sua</Text>
+                    <Text style={styles.smallButtonText}>Sửa</Text>
                   </Pressable>
 
                   <Pressable
                     style={[styles.smallButton, styles.deleteButton]}
                     onPress={() => confirmDeleteSchedule(schedule)}
                   >
-                    <Text style={styles.deleteButtonText}>Xoa</Text>
+                    <Text style={styles.deleteButtonText}>Xóa</Text>
                   </Pressable>
 
                   <Pressable
@@ -440,7 +440,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
                     {isRunning ? (
                       <ActivityIndicator color="#FFFFFF" />
                     ) : (
-                      <Text style={styles.runButtonText}>Chay ngay</Text>
+                      <Text style={styles.runButtonText}>Chạy ngay</Text>
                     )}
                   </Pressable>
                 </View>
@@ -455,23 +455,23 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.modalCard}>
             <View style={styles.modalHeaderRow}>
               <Text style={styles.modalTitle}>
-                {editingScheduleId ? 'Sua lich hen gio' : 'Them lich hen gio'}
+                {editingScheduleId ? 'Sửa lịch hẹn giờ' : 'Thêm lịch hẹn giờ'}
               </Text>
               <Pressable style={styles.closeButton} onPress={closeForm}>
                 <Text style={styles.closeButtonText}>X</Text>
               </Pressable>
             </View>
 
-            <Text style={styles.inputLabel}>Ten lich</Text>
+            <Text style={styles.inputLabel}>Tên lịch</Text>
             <TextInput
               style={styles.input}
               value={form.title}
               onChangeText={(title) => setForm((current) => ({ ...current, title }))}
-              placeholder="Vi du: Bat den phong khach"
+              placeholder="Ví dụ: Bật đèn phòng khách"
               placeholderTextColor={theme.colors.textSecondary}
             />
 
-            <Text style={styles.inputLabel}>Gio hen</Text>
+            <Text style={styles.inputLabel}>Giờ hẹn</Text>
             <TextInput
               style={styles.input}
               value={form.time}
@@ -482,7 +482,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
               maxLength={5}
             />
 
-            <Text style={styles.inputLabel}>Pham vi den</Text>
+            <Text style={styles.inputLabel}>Phạm vi đèn</Text>
             <View style={styles.optionGrid}>
               {targetOptions.map((option) => {
                 const isSelected = form.target === option.target;
@@ -514,7 +514,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
               })}
             </View>
 
-            <Text style={styles.inputLabel}>Hanh dong</Text>
+            <Text style={styles.inputLabel}>Hành động</Text>
             <View style={styles.segmentRow}>
               <Pressable
                 style={[styles.segmentButton, form.action === 'ON' && styles.segmentSelected]}
@@ -523,7 +523,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
                 <Text
                   style={[styles.segmentText, form.action === 'ON' && styles.segmentTextSelected]}
                 >
-                  Bat den
+                  Bật đèn
                 </Text>
               </Pressable>
               <Pressable
@@ -533,7 +533,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
                 <Text
                   style={[styles.segmentText, form.action === 'OFF' && styles.segmentTextSelected]}
                 >
-                  Tat den
+                  Tắt đèn
                 </Text>
               </Pressable>
             </View>
@@ -543,19 +543,19 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
               onPress={() => setForm((current) => ({ ...current, enabled: !current.enabled }))}
             >
               <View style={[styles.checkBox, form.enabled && styles.checkBoxOn]}>
-                <Text style={styles.checkBoxText}>{form.enabled ? 'ON' : ''}</Text>
+                <Text style={styles.checkBoxText}>{form.enabled ? '✓' : ''}</Text>
               </View>
-              <Text style={styles.enabledText}>Kich hoat lich sau khi luu</Text>
+              <Text style={styles.enabledText}>Kích hoạt lịch sau khi lưu</Text>
             </Pressable>
 
             {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
 
             <View style={styles.formActionRow}>
               <Pressable style={styles.cancelButton} onPress={closeForm}>
-                <Text style={styles.cancelButtonText}>Huy</Text>
+                <Text style={styles.cancelButtonText}>Hủy</Text>
               </Pressable>
               <Pressable style={styles.saveButton} onPress={handleSaveForm}>
-                <Text style={styles.saveButtonText}>Luu lich</Text>
+                <Text style={styles.saveButtonText}>Lưu lịch</Text>
               </Pressable>
             </View>
           </View>
@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
   },
   smallButton: {
     flexGrow: 1,
-    flexBasis: '22%',
+    flexBasis: '46%',
     borderRadius: 10,
     paddingVertical: 11,
     alignItems: 'center',
@@ -797,7 +797,7 @@ const styles = StyleSheet.create({
   },
   runButton: {
     flexGrow: 1,
-    flexBasis: '22%',
+    flexBasis: '46%',
     borderRadius: 10,
     paddingVertical: 11,
     alignItems: 'center',

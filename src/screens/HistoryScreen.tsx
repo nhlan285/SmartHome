@@ -18,14 +18,14 @@ export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Sprint 5: Lay lich su dieu khien tu service, UI chi hien thi ket qua.
+  // Sprint 5: Lấy lịch sử điều khiển từ service, UI chỉ hiển thị kết quả.
   const loadHistory = useCallback(async (): Promise<void> => {
     try {
       setError(null);
       const response = await getControlHistory();
       setHistory(response);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Khong the tai lich su dieu khien.';
+      const message = err instanceof Error ? err.message : 'Không thể tải lịch sử điều khiển.';
       setError(message);
     } finally {
       setIsLoading(false);
@@ -39,8 +39,8 @@ export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <SafeAreaView style={[styles.safeArea, isDarkMode && styles.safeAreaDark]}>
       <View style={styles.container}>
-        <Text style={styles.title}>History</Text>
-        <Text style={styles.subtitle}>Lich su dieu khien tu backend</Text>
+        <Text style={styles.title}>Lịch sử</Text>
+        <Text style={styles.subtitle}>Lịch sử điều khiển từ máy chủ</Text>
 
         <VoicePrimaryButton navigation={navigation} />
 
@@ -53,7 +53,7 @@ export const HistoryScreen: React.FC<Props> = ({ navigation }) => {
             void loadHistory();
           }}
         >
-          <Text style={styles.refreshButtonText}>Refresh</Text>
+          <Text style={styles.refreshButtonText}>Làm mới</Text>
         </Pressable>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}

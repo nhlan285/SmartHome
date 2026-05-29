@@ -21,23 +21,37 @@ export type RoomDeviceGroup = {
 export const ROOM_ORDER: Esp32Room[] = ['living', 'bedroom', 'kitchen', 'hallway'];
 
 const ROOM_LABELS: Record<DeviceRoomKey, string> = {
-  living: 'Phong khach',
-  bedroom: 'Phong ngu',
-  kitchen: 'Nha bep',
-  hallway: 'Hanh lang',
-  unknown: 'Khac'
+  living: 'Phòng khách',
+  bedroom: 'Phòng ngủ',
+  kitchen: 'Nhà bếp',
+  hallway: 'Hành lang',
+  unknown: 'Khác'
 };
 
 const DEVICE_KIND_LABELS: Record<DeviceKindKey, string> = {
-  light: 'Den',
-  fan: 'Quat',
-  door: 'Cua',
-  unknown: 'Thiet bi'
+  light: 'Đèn',
+  fan: 'Quạt',
+  door: 'Cửa',
+  unknown: 'Thiết bị'
 };
 
 export const getRoomLabel = (room: DeviceRoomKey): string => ROOM_LABELS[room];
 
 export const getDeviceKindLabel = (kind: DeviceKindKey): string => DEVICE_KIND_LABELS[kind];
+
+export const getDeviceStatusLabel = (status: string | undefined): string => {
+  const normalized = status?.trim().toLowerCase();
+
+  if (normalized === 'on') {
+    return 'Bật';
+  }
+
+  if (normalized === 'off') {
+    return 'Tắt';
+  }
+
+  return 'Không rõ';
+};
 
 export const getDeviceRoomInfo = (
   deviceId: string

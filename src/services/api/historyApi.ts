@@ -22,21 +22,21 @@ export const getControlHistory = async (): Promise<ControlHistoryItem[]> => {
     const response = await backendClient.get<ControlHistoryItem[]>(API_PATHS.history);
 
     if (!Array.isArray(response.data)) {
-      throw new Error('Du lieu history khong dung dinh dang mang.');
+      throw new Error('Dữ liệu lịch sử không đúng định dạng mảng.');
     }
 
     return response.data;
   } catch (error: unknown) {
     const detail = axios.isAxiosError(error)
-      ? `${error.response?.status ? `HTTP ${error.response.status}` : 'Network error'}: ${error.message}`
-      : 'Unknown error';
+      ? `${error.response?.status ? `HTTP ${error.response.status}` : 'Lỗi mạng'}: ${error.message}`
+      : 'Lỗi không xác định';
 
-    console.error('[getControlHistory] Loi lay lich su', {
+    console.error('[getControlHistory] Lỗi lấy lịch sử', {
       apiPath: API_PATHS.history,
       detail,
-      suggestion: 'Kiem tra endpoint history, trang thai backend, va ket noi mang.'
+      suggestion: 'Kiểm tra endpoint lịch sử, trạng thái backend và kết nối mạng.'
     });
 
-    throw new Error(`Khong the lay lich su dieu khien. ${detail}`);
+    throw new Error(`Không thể lấy lịch sử điều khiển. ${detail}`);
   }
 };

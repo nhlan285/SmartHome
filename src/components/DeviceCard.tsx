@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { DeviceState } from '@/types/models';
 import { theme } from '@/styles/theme';
+import { getDeviceStatusLabel } from '@/utils/deviceRooms';
 
 interface DeviceCardProps {
   device: DeviceState;
@@ -16,7 +17,7 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({ device, isBusy, onToggle
     <View style={styles.card}>
       <View>
         <Text style={styles.name}>{device.name}</Text>
-        <Text style={styles.meta}>State: {isOn ? 'ON' : 'OFF'}</Text>
+        <Text style={styles.meta}>Trạng thái: {getDeviceStatusLabel(device.status)}</Text>
       </View>
 
       <Pressable
@@ -24,7 +25,7 @@ export const DeviceCard: React.FC<DeviceCardProps> = ({ device, isBusy, onToggle
         onPress={() => onToggle(device)}
         disabled={isBusy}
       >
-        <Text style={styles.buttonText}>{isBusy ? '...' : isOn ? 'Turn Off' : 'Turn On'}</Text>
+        <Text style={styles.buttonText}>{isBusy ? '...' : isOn ? 'Tắt' : 'Bật'}</Text>
       </Pressable>
     </View>
   );

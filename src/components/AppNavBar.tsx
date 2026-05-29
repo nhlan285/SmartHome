@@ -18,10 +18,10 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { route: 'Dashboard', label: 'Dashboard' },
-  { route: 'Control', label: 'Control' },
-  { route: 'History', label: 'History' },
-  { route: 'Schedule', label: 'Schedule' }
+  { route: 'Dashboard', label: 'Trang chủ' },
+  { route: 'Control', label: 'Điều khiển' },
+  { route: 'History', label: 'Lịch sử' },
+  { route: 'Schedule', label: 'Hẹn giờ' }
 ];
 
 export function AppNavBar<RouteName extends AppRouteName>({

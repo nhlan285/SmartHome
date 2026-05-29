@@ -29,7 +29,7 @@ export const HomeScreen: React.FC = () => {
       const data = await getDashboardState();
       setSnapshot(data);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to load dashboard data.';
+      const message = err instanceof Error ? err.message : 'Không thể tải dữ liệu tổng quan.';
       setError(message);
     } finally {
       setIsLoading(false);
@@ -73,7 +73,7 @@ export const HomeScreen: React.FC = () => {
 
       await triggerBackendCommandLog({ deviceId: updated.deviceId, action: updated.status });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to control device.';
+      const message = err instanceof Error ? err.message : 'Không thể điều khiển thiết bị.';
       setError(message);
     } finally {
       setPendingDeviceId(null);
@@ -81,7 +81,7 @@ export const HomeScreen: React.FC = () => {
   };
 
   const connectionText = useMemo(
-    () => (isConnected ? 'Live updates connected' : 'WebSocket disconnected'),
+    () => (isConnected ? 'Đã kết nối cập nhật trực tiếp' : 'Mất kết nối thời gian thực'),
     [isConnected]
   );
 
@@ -91,7 +91,7 @@ export const HomeScreen: React.FC = () => {
         contentContainerStyle={styles.container}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
       >
-        <Text style={styles.heading}>Smart Home Dashboard</Text>
+        <Text style={styles.heading}>Bảng điều khiển nhà thông minh</Text>
         <View style={[styles.connectionPill, isConnected ? styles.connected : styles.disconnected]}>
           <Text style={styles.connectionText}>{connectionText}</Text>
         </View>
@@ -103,7 +103,7 @@ export const HomeScreen: React.FC = () => {
         ) : snapshot ? (
           <>
             <SensorPanel sensors={snapshot.sensors} />
-            <Text style={styles.sectionTitle}>Devices</Text>
+            <Text style={styles.sectionTitle}>Thiết bị</Text>
             {snapshot.devices.map((device) => (
               <DeviceCard
                 key={device.deviceId}
@@ -114,7 +114,7 @@ export const HomeScreen: React.FC = () => {
             ))}
           </>
         ) : (
-          <Text style={styles.empty}>No dashboard data found.</Text>
+          <Text style={styles.empty}>Không tìm thấy dữ liệu tổng quan.</Text>
         )}
       </ScrollView>
     </SafeAreaView>

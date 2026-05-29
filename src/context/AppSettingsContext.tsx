@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS: AppSettingsState = {
   colorMode: 'light',
   wifiId: DEFAULT_WIFI_ID,
   profile: {
-    displayName: 'Smart Home User',
+    displayName: 'Người dùng nhà thông minh',
     avatarInitial: 'B'
   }
 };
@@ -56,8 +56,18 @@ const normalizeAvatarInitial = (value: string): string => {
   return trimmed[0].toUpperCase();
 };
 
+const normalizeDisplayName = (value: string | undefined): string => {
+  const trimmed = value?.trim();
+
+  if (!trimmed || trimmed === 'Smart Home User') {
+    return DEFAULT_SETTINGS.profile.displayName;
+  }
+
+  return trimmed;
+};
+
 const normalizeProfile = (value: Partial<AccountProfile> | undefined): AccountProfile => ({
-  displayName: value?.displayName?.trim() || DEFAULT_SETTINGS.profile.displayName,
+  displayName: normalizeDisplayName(value?.displayName),
   avatarInitial: normalizeAvatarInitial(value?.avatarInitial ?? DEFAULT_SETTINGS.profile.avatarInitial)
 });
 
@@ -96,7 +106,7 @@ export const AppSettingsProvider: React.FC<PropsWithChildren> = ({ children }) =
 
         setSettingsError('');
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : 'Khong the doc cai dat.';
+        const message = error instanceof Error ? error.message : 'Không thể đọc cài đặt.';
         setSettingsError(message);
       } finally {
         if (isMounted) {
@@ -122,7 +132,7 @@ export const AppSettingsProvider: React.FC<PropsWithChildren> = ({ children }) =
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
         setSettingsError('');
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : 'Khong the luu cai dat.';
+        const message = error instanceof Error ? error.message : 'Không thể lưu cài đặt.';
         setSettingsError(message);
       }
     };
@@ -186,7 +196,7 @@ export const AppSettingsProvider: React.FC<PropsWithChildren> = ({ children }) =
 export const useAppSettings = (): AppSettingsContextValue => {
   const context = useContext(AppSettingsContext);
   if (!context) {
-    throw new Error('useAppSettings phai duoc dung trong AppSettingsProvider');
+    throw new Error('useAppSettings phải được dùng trong AppSettingsProvider');
   }
 
   return context;

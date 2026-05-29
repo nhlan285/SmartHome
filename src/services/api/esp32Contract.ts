@@ -24,10 +24,10 @@ export type Esp32StatePayload = {
 };
 
 const ROOM_LABELS: Record<Esp32Room, string> = {
-  living: 'Living Room',
-  bedroom: 'Bedroom',
-  kitchen: 'Kitchen',
-  hallway: 'Hallway'
+  living: 'phòng khách',
+  bedroom: 'phòng ngủ',
+  kitchen: 'nhà bếp',
+  hallway: 'hành lang'
 };
 
 const ROOM_SUFFIX: Record<Esp32Room, string> = {
@@ -38,9 +38,9 @@ const ROOM_SUFFIX: Record<Esp32Room, string> = {
 };
 
 const DEVICE_LABELS: Record<Esp32Device, string> = {
-  light: 'Light',
-  fan: 'Fan',
-  door: 'Door'
+  light: 'Đèn',
+  fan: 'Quạt',
+  door: 'Cửa'
 };
 
 const toBoolean = (value: unknown): boolean => {
@@ -133,11 +133,16 @@ const normalizeDashboardSnapshot = (snapshot: DashboardSnapshot): DashboardSnaps
   const updatedAt = snapshot.sensors?.updatedAt || new Date().toISOString();
 
   return {
-    devices: snapshot.devices.map((item) => ({
-      ...item,
-      status: normalizeDeviceStatus(item.status),
-      updatedAt: item.updatedAt || updatedAt
-    })),
+    devices: snapshot.devices.map((item) => {
+      const parsed = extractRoomDeviceFromDeviceId(item.deviceId);
+
+      return {
+        ...item,
+        name: parsed ? buildDeviceName(parsed.room, parsed.device) : item.name,
+        status: normalizeDeviceStatus(item.status),
+        updatedAt: item.updatedAt || updatedAt
+      };
+    }),
     sensors: {
       temperatureC: toNumber(snapshot.sensors.temperatureC),
       humidityPercent: toNumber(snapshot.sensors.humidityPercent),
@@ -153,7 +158,7 @@ export const mapStatePayloadToDashboardSnapshot = (payload: unknown): DashboardS
   }
 
   if (!isObject(payload)) {
-    throw new Error('State payload khong phai object hop le.');
+    throw new Error('Payload trạng thái không phải đối tượng hợp lệ.');
   }
 
   const data = payload as Esp32StatePayload;
@@ -186,48 +191,48 @@ export const mapStatePayloadToDashboardSnapshot = (payload: unknown): DashboardS
 export const normalizeRoomInput = (room: string): Esp32Room => {
   const normalized = room.trim().toLowerCase().replace(/[_-]/g, ' ');
 
-  if (['living', 'living room', 'phong khach', 'phongkhach'].includes(normalized)) {
+  if (['living', 'living room', 'phong khach', 'phongkhach', 'phòng khách'].includes(normalized)) {
     return 'living';
   }
 
-  if (['bedroom', 'bed room', 'phong ngu', 'phongngu'].includes(normalized)) {
+  if (['bedroom', 'bed room', 'phong ngu', 'phongngu', 'phòng ngủ'].includes(normalized)) {
     return 'bedroom';
   }
 
-  if (['kitchen', 'phong bep', 'phongbep', 'bep'].includes(normalized)) {
+  if (['kitchen', 'phong bep', 'phongbep', 'bep', 'phòng bếp', 'bếp'].includes(normalized)) {
     return 'kitchen';
   }
 
-  if (['hallway', 'hall', 'hanh lang', 'hanhlang'].includes(normalized)) {
+  if (['hallway', 'hall', 'hanh lang', 'hanhlang', 'hành lang'].includes(normalized)) {
     return 'hallway';
   }
 
-  throw new Error(`Room khong hop le: ${room}`);
+  throw new Error(`Phòng không hợp lệ: ${room}`);
 };
 
 export const normalizeDeviceInput = (device: string): Esp32Device => {
   const normalized = device.trim().toLowerCase().replace(/[_-]/g, ' ');
 
-  if (['light', 'den'].includes(normalized)) {
+  if (['light', 'den', 'đèn'].includes(normalized)) {
     return 'light';
   }
 
-  if (['fan', 'quat'].includes(normalized)) {
+  if (['fan', 'quat', 'quạt'].includes(normalized)) {
     return 'fan';
   }
 
-  if (['door', 'cua'].includes(normalized)) {
+  if (['door', 'cua', 'cửa'].includes(normalized)) {
     return 'door';
   }
 
-  throw new Error(`Device khong hop le: ${device}`);
+  throw new Error(`Thiết bị không hợp lệ: ${device}`);
 };
 
 export const buildDeviceId = (room: Esp32Room, device: Esp32Device): string =>
   `${device}-${ROOM_SUFFIX[room]}`;
 
 export const buildDeviceName = (room: Esp32Room, device: Esp32Device): string =>
-  `${ROOM_LABELS[room]} ${DEVICE_LABELS[device]}`;
+  `${DEVICE_LABELS[device]} ${ROOM_LABELS[room]}`;
 
 export const extractRoomDeviceFromDeviceId = (
   deviceId: string

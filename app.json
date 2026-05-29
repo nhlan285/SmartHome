@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Smart Home Voice",
+    "name": "Nhà Thông Minh",
     "slug": "smart-home-voice-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "This app records your voice to send smart-home commands."
+        "NSMicrophoneUsageDescription": "Ứng dụng cần ghi âm giọng nói để gửi lệnh điều khiển nhà thông minh."
       }
     },
     "android": {

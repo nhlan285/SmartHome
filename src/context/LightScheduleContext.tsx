@@ -59,6 +59,17 @@ const isScheduleTarget = (value: unknown): value is LightScheduleTarget =>
 const isScheduleAction = (value: unknown): value is LightSchedule['action'] =>
   value === 'ON' || value === 'OFF';
 
+const normalizeScheduleTitle = (title: string): string => {
+  const titleMap: Record<string, string> = {
+    'Bat den phong khach': 'Bật đèn phòng khách',
+    'Bat den phong ngu': 'Bật đèn phòng ngủ',
+    'Bat toan bo den': 'Bật toàn bộ đèn',
+    'Tat toan bo den': 'Tắt toàn bộ đèn'
+  };
+
+  return titleMap[title] ?? title;
+};
+
 const normalizeStoredSchedule = (value: unknown): LightSchedule | null => {
   if (!isObject(value)) {
     return null;
@@ -75,7 +86,7 @@ const normalizeStoredSchedule = (value: unknown): LightSchedule | null => {
   try {
     return {
       id,
-      title,
+      title: normalizeScheduleTitle(title),
       time: normalizeScheduleTime(time),
       target: value.target,
       action: value.action,
@@ -95,7 +106,7 @@ const parseStoredPayload = (raw: string): StoredSchedulePayload => {
       : null;
 
   if (!scheduleSource) {
-    throw new Error('Du lieu lich hen gio khong hop le.');
+    throw new Error('Dữ liệu lịch hẹn giờ không hợp lệ.');
   }
 
   const schedules = scheduleSource
@@ -117,7 +128,7 @@ export const LightScheduleProvider: React.FC<PropsWithChildren> = ({ children })
   const [schedules, setSchedules] = useState<LightSchedule[]>(() => createDefaultLightSchedules());
   const [isSchedulerEnabled, setIsSchedulerEnabled] = useState(true);
   const [isStoreReady, setIsStoreReady] = useState(false);
-  const [lastRunMessage, setLastRunMessage] = useState('Chua co lich nao chay');
+  const [lastRunMessage, setLastRunMessage] = useState('Chưa có lịch nào chạy');
   const [storageError, setStorageError] = useState('');
 
   const schedulesRef = useRef(schedules);
@@ -155,7 +166,7 @@ export const LightScheduleProvider: React.FC<PropsWithChildren> = ({ children })
 
         setStorageError('');
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : 'Khong the doc lich hen gio.';
+        const message = error instanceof Error ? error.message : 'Không thể đọc lịch hẹn giờ.';
         setStorageError(message);
       } finally {
         if (isMounted) {
@@ -185,7 +196,7 @@ export const LightScheduleProvider: React.FC<PropsWithChildren> = ({ children })
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
         setStorageError('');
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : 'Khong the luu lich hen gio.';
+        const message = error instanceof Error ? error.message : 'Không thể lưu lịch hẹn giờ.';
         setStorageError(message);
       }
     };
@@ -197,7 +208,7 @@ export const LightScheduleProvider: React.FC<PropsWithChildren> = ({ children })
     const rooms = schedule.target === 'all' ? LIGHT_SCHEDULE_ROOMS : [schedule.target];
     const summary = getScheduleCommandSummary(schedule);
 
-    setLastRunMessage(`Dang chay: ${schedule.time} - ${summary}`);
+    setLastRunMessage(`Đang chạy: ${schedule.time} - ${summary}`);
 
     const results = await Promise.allSettled(
       rooms.map((room) => controlDevice(room, 'light', schedule.action))
@@ -206,12 +217,12 @@ export const LightScheduleProvider: React.FC<PropsWithChildren> = ({ children })
     const failedCount = results.filter((result) => result.status === 'rejected').length;
 
     if (failedCount > 0) {
-      const message = `${summary} loi ${failedCount}/${rooms.length} lenh`;
+      const message = `${summary} lỗi ${failedCount}/${rooms.length} lệnh`;
       setLastRunMessage(message);
       throw new Error(message);
     }
 
-    setLastRunMessage(`${schedule.time} - ${summary} thanh cong`);
+    setLastRunMessage(`${schedule.time} - ${summary} thành công`);
   }, []);
 
   const checkSchedules = useCallback((): void => {
@@ -237,8 +248,8 @@ export const LightScheduleProvider: React.FC<PropsWithChildren> = ({ children })
 
       executedRunKeysRef.current.add(runKey);
       void executeSchedule(schedule).catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : 'Lich hen gio chay that bai';
-        console.error('[LightScheduleProvider] Loi chay lich hen gio', {
+        const message = error instanceof Error ? error.message : 'Lịch hẹn giờ chạy thất bại';
+        console.error('[LightScheduleProvider] Lỗi chạy lịch hẹn giờ', {
           schedule,
           message
         });
@@ -307,7 +318,7 @@ export const LightScheduleProvider: React.FC<PropsWithChildren> = ({ children })
     async (scheduleId: string): Promise<void> => {
       const schedule = schedulesRef.current.find((item) => item.id === scheduleId);
       if (!schedule) {
-        throw new Error(`Khong tim thay lich hen gio: ${scheduleId}`);
+        throw new Error(`Không tìm thấy lịch hẹn giờ: ${scheduleId}`);
       }
 
       await executeSchedule(schedule);
@@ -352,7 +363,7 @@ export const LightScheduleProvider: React.FC<PropsWithChildren> = ({ children })
 export const useLightSchedules = (): LightScheduleContextValue => {
   const context = useContext(LightScheduleContext);
   if (!context) {
-    throw new Error('useLightSchedules phai duoc dung trong LightScheduleProvider');
+    throw new Error('useLightSchedules phải được dùng trong LightScheduleProvider');
   }
 
   return context;

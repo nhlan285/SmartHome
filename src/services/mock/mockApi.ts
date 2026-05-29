@@ -40,7 +40,7 @@ export const mockControlDevice = async (
 
   const updated = devicesState.find((device) => device.deviceId === payload.deviceId);
   if (!updated) {
-    throw new Error('Device not found');
+    throw new Error('Không tìm thấy thiết bị');
   }
 
   return updated;

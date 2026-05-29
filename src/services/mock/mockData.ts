@@ -3,19 +3,19 @@ import { ControlHistoryItem, DashboardSnapshot, DeviceState, SensorData, VoiceCo
 export const mockDevices: DeviceState[] = [
   {
     deviceId: 'light-living-room',
-    name: 'Living Room Light',
+    name: 'Đèn phòng khách',
     status: 'off',
     updatedAt: new Date().toISOString()
   },
   {
     deviceId: 'fan-bedroom',
-    name: 'Bedroom Fan',
+    name: 'Quạt phòng ngủ',
     status: 'on',
     updatedAt: new Date().toISOString()
   },
   {
     deviceId: 'garage-door',
-    name: 'Garage Door',
+    name: 'Cửa nhà xe',
     status: 'off',
     updatedAt: new Date().toISOString()
   }
@@ -34,28 +34,28 @@ export const mockDashboard: DashboardSnapshot = {
 };
 
 export const mockVoiceResult: VoiceCommandResult = {
-  transcript: 'Turn on living room light',
+  transcript: 'Bật đèn phòng khách',
   intent: 'device_control',
   confidence: 0.95,
   entities: {
     deviceId: 'light-living-room',
     action: 'on'
   },
-  suggestedAction: 'Switch Living Room Light on'
+  suggestedAction: 'Bật đèn phòng khách'
 };
 
 export const mockHistory: ControlHistoryItem[] = [
   {
     id: 'hist-1',
     source: 'voice',
-    commandText: 'Turn on living room light',
+    commandText: 'Bật đèn phòng khách',
     status: 'success',
     timestamp: new Date(Date.now() - 5 * 60_000).toISOString()
   },
   {
     id: 'hist-2',
     source: 'manual',
-    commandText: 'Fan set to off',
+    commandText: 'Tắt quạt phòng ngủ',
     status: 'failed',
     timestamp: new Date(Date.now() - 20 * 60_000).toISOString()
   }

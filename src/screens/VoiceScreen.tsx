@@ -30,7 +30,7 @@ type ParsedIntent = {
 
 type StatusType = 'info' | 'success' | 'error';
 
-const SAMPLE_TRANSCRIPTS = ['bat den phong khach', 'tat quat phong ngu'];
+const SAMPLE_TRANSCRIPTS = ['bật đèn phòng khách', 'tắt quạt phòng ngủ'];
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -39,26 +39,30 @@ const wait = (ms: number): Promise<void> =>
 
 const parseIntent = (text: string): ParsedIntent => {
   const normalized = text.toLowerCase().trim();
+  const plainText = normalized
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
 
-  const isOn = /\b(bat|bật)\b/.test(normalized);
-  const isOff = /\b(tat|tắt)\b/.test(normalized);
+  const isOn = /\bbat\b/.test(plainText);
+  const isOff = /\btat\b/.test(plainText);
 
   if (isOn === isOff) {
-    throw new Error('Khong xac dinh duoc hanh dong bat/tat tu cau lenh.');
+    throw new Error('Không xác định được hành động bật/tắt từ câu lệnh.');
   }
 
-  const isLight = /\b(den|đèn)\b/.test(normalized);
-  const isFan = /\b(quat|quạt)\b/.test(normalized);
+  const isLight = /\bden\b/.test(plainText);
+  const isFan = /\bquat\b/.test(plainText);
 
   if (isLight === isFan) {
-    throw new Error('Khong xac dinh duoc thiet bi (den/quat).');
+    throw new Error('Không xác định được thiết bị (đèn/quạt).');
   }
 
-  const isLivingRoom = /(phong\s*khach|phòng\s*khách)/.test(normalized);
-  const isBedroom = /(phong\s*ngu|phòng\s*ngủ)/.test(normalized);
+  const isLivingRoom = /phong\s*khach/.test(plainText);
+  const isBedroom = /phong\s*ngu/.test(plainText);
 
   if (isLivingRoom === isBedroom) {
-    throw new Error('Khong xac dinh duoc vi tri (phong khach/phong ngu).');
+    throw new Error('Không xác định được vị trí (phòng khách/phòng ngủ).');
   }
 
   return {
@@ -76,14 +80,18 @@ const mockSpeechToText = async (_audioUri: string): Promise<string> => {
 
 const mockSendCommand = async (intent: ParsedIntent): Promise<string> => {
   await wait(900);
-  const actionText = intent.action === 'on' ? 'bat' : 'tat';
-  const deviceText = intent.device === 'light' ? 'den' : 'quat';
-  const locationText = intent.location === 'living_room' ? 'phong khach' : 'phong ngu';
-  return `Da ${actionText} ${deviceText} ${locationText}`;
+  const actionText = intent.action === 'on' ? 'bật' : 'tắt';
+  const deviceText = intent.device === 'light' ? 'đèn' : 'quạt';
+  const locationText = intent.location === 'living_room' ? 'phòng khách' : 'phòng ngủ';
+  return `Đã ${actionText} ${deviceText} ${locationText}`;
 };
 
-const formatIntent = (intent: ParsedIntent): string =>
-  `device=${intent.device}, location=${intent.location}, action=${intent.action}`;
+const formatIntent = (intent: ParsedIntent): string => {
+  const actionText = intent.action === 'on' ? 'Bật' : 'Tắt';
+  const deviceText = intent.device === 'light' ? 'đèn' : 'quạt';
+  const locationText = intent.location === 'living_room' ? 'phòng khách' : 'phòng ngủ';
+  return `${actionText} ${deviceText} ${locationText}`;
+};
 
 export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
   const { isDarkMode } = useAppSettings();
@@ -94,7 +102,7 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [transcript, setTranscript] = useState('');
   const [intent, setIntent] = useState<ParsedIntent | null>(null);
-  const [status, setStatus] = useState('Nhan giu nut mic de ghi am');
+  const [status, setStatus] = useState('Nhấn giữ nút mic để ghi âm');
   const [statusType, setStatusType] = useState<StatusType>('info');
 
   useEffect(() => {
@@ -113,13 +121,13 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
 
     try {
       setStatusType('info');
-      setStatus('Listening...');
+      setStatus('Đang nghe...');
       setTranscript('');
       setIntent(null);
 
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
-        throw new Error('Ban chua cap quyen micro.');
+        throw new Error('Bạn chưa cấp quyền micro.');
       }
 
       await Audio.setAudioModeAsync({
@@ -134,7 +142,7 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
       recordingRef.current = recorder;
       setRecording(true);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Khong the bat dau ghi am.';
+      const message = error instanceof Error ? error.message : 'Không thể bắt đầu ghi âm.';
       setStatusType('error');
       setStatus(message);
     }
@@ -153,13 +161,13 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
       recordingRef.current = null;
 
       if (!uri) {
-        throw new Error('Khong lay duoc file ghi am.');
+        throw new Error('Không lấy được tệp ghi âm.');
       }
 
       setAudioUri(uri);
       setProcessing(true);
       setStatusType('info');
-      setStatus('Dang xu ly lenh giong noi...');
+      setStatus('Đang xử lý lệnh giọng nói...');
 
       const text = await mockSpeechToText(uri);
       setTranscript(text);
@@ -171,7 +179,7 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
       setStatusType('success');
       setStatus(commandStatus);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Xu ly giong noi that bai.';
+      const message = error instanceof Error ? error.message : 'Xử lý giọng nói thất bại.';
       setStatusType('error');
       setStatus(message);
     } finally {
@@ -185,9 +193,9 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <SafeAreaView style={[styles.safeArea, isDarkMode && styles.safeAreaDark]}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.caption}>Voice Assistant</Text>
-        <Text style={styles.title}>Voice Control</Text>
-        <Text style={styles.subtitle}>Nhan giu nut mic de ghi am, tha tay de xu ly lenh.</Text>
+        <Text style={styles.caption}>Trợ lý giọng nói</Text>
+        <Text style={styles.title}>Điều khiển bằng giọng nói</Text>
+        <Text style={styles.subtitle}>Nhấn giữ nút mic để ghi âm, thả tay để xử lý lệnh.</Text>
 
         <View style={styles.micFrame}>
           <TouchableOpacity
@@ -203,30 +211,30 @@ export const VoiceScreen: React.FC<Props> = ({ navigation }) => {
           >
             <MaterialIcons name={recording ? 'stop' : 'mic'} size={42} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.micHint}>Hold button to record, release to process</Text>
+          <Text style={styles.micHint}>Giữ nút để ghi âm, thả tay để xử lý</Text>
         </View>
 
         {processing ? (
           <View style={styles.processingRow}>
             <ActivityIndicator color={theme.colors.primary} />
-            <Text style={styles.processingText}>Dang xu ly...</Text>
+            <Text style={styles.processingText}>Đang xử lý...</Text>
           </View>
         ) : null}
 
         <View style={styles.panel}>
-          <Text style={styles.label}>Listening</Text>
-          <Text style={styles.value}>{recording ? 'Listening...' : 'Idle'}</Text>
+          <Text style={styles.label}>Ghi âm</Text>
+          <Text style={styles.value}>{recording ? 'Đang nghe...' : 'Sẵn sàng'}</Text>
 
-          <Text style={styles.label}>Audio URI</Text>
-          <Text style={styles.value}>{audioUri ?? 'Chua co file ghi am'}</Text>
+          <Text style={styles.label}>Đường dẫn âm thanh</Text>
+          <Text style={styles.value}>{audioUri ?? 'Chưa có tệp ghi âm'}</Text>
 
-          <Text style={styles.label}>Transcribed text</Text>
-          <Text style={styles.value}>{transcript || 'Chua co transcript'}</Text>
+          <Text style={styles.label}>Văn bản nhận diện</Text>
+          <Text style={styles.value}>{transcript || 'Chưa có văn bản nhận diện'}</Text>
 
-          <Text style={styles.label}>Parsed command</Text>
-          <Text style={styles.value}>{intent ? formatIntent(intent) : 'Chua parse intent'}</Text>
+          <Text style={styles.label}>Lệnh đã phân tích</Text>
+          <Text style={styles.value}>{intent ? formatIntent(intent) : 'Chưa phân tích lệnh'}</Text>
 
-          <Text style={styles.label}>Status</Text>
+          <Text style={styles.label}>Trạng thái</Text>
           <Text
             style={[
               styles.value,

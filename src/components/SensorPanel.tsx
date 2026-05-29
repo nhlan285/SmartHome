@@ -10,18 +10,18 @@ interface SensorPanelProps {
 
 export const SensorPanel: React.FC<SensorPanelProps> = ({ sensors }) => (
   <View style={styles.card}>
-    <Text style={styles.title}>Sensor Data</Text>
+    <Text style={styles.title}>Dữ liệu cảm biến</Text>
     <View style={styles.row}>
       <View style={styles.item}>
-        <Text style={styles.label}>Temperature</Text>
+        <Text style={styles.label}>Nhiệt độ</Text>
         <Text style={styles.value}>{formatTemp(sensors.temperatureC)}</Text>
       </View>
       <View style={styles.item}>
-        <Text style={styles.label}>Humidity</Text>
+        <Text style={styles.label}>Độ ẩm</Text>
         <Text style={styles.value}>{formatPercent(sensors.humidityPercent)}</Text>
       </View>
       <View style={styles.item}>
-        <Text style={styles.label}>Gas</Text>
+        <Text style={styles.label}>Khí gas</Text>
         <Text style={styles.value}>{formatGas(sensors.gasPpm)}</Text>
       </View>
     </View>

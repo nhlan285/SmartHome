@@ -32,7 +32,7 @@ export const VoiceControlScreen: React.FC = () => {
       const response = await processVoiceCommand(recordedUri);
       setResult(response);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Voice processing failed.';
+      const message = err instanceof Error ? err.message : 'Xử lý giọng nói thất bại.';
       setScreenError(message);
     } finally {
       setIsSubmitting(false);
@@ -42,9 +42,9 @@ export const VoiceControlScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.heading}>Voice Control</Text>
+        <Text style={styles.heading}>Điều khiển giọng nói</Text>
         <Text style={styles.subheading}>
-          Tap once to start recording, tap again to upload to backend AI.
+          Chạm một lần để bắt đầu ghi âm, chạm lần nữa để gửi lên máy chủ AI.
         </Text>
 
         <Pressable
@@ -55,7 +55,7 @@ export const VoiceControlScreen: React.FC = () => {
           disabled={isSubmitting}
         >
           <Text style={styles.buttonText}>
-            {isSubmitting ? 'Processing...' : isRecording ? 'Stop & Send' : 'Start Recording'}
+            {isSubmitting ? 'Đang xử lý...' : isRecording ? 'Dừng và gửi' : 'Bắt đầu ghi âm'}
           </Text>
         </Pressable>
 

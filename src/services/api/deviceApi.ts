@@ -26,61 +26,61 @@ export const MOCK_DEVICE_STATE: DashboardSnapshot = {
   devices: [
     {
       deviceId: 'light-living-room',
-      name: 'Living Room Light',
+      name: 'Đèn phòng khách',
       status: 'on',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'fan-living-room',
-      name: 'Living Room Fan',
+      name: 'Quạt phòng khách',
       status: 'off',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'light-bedroom',
-      name: 'Bedroom Light',
+      name: 'Đèn phòng ngủ',
       status: 'off',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'fan-bedroom',
-      name: 'Bedroom Fan',
+      name: 'Quạt phòng ngủ',
       status: 'on',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'light-kitchen',
-      name: 'Kitchen Light',
+      name: 'Đèn nhà bếp',
       status: 'on',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'fan-kitchen',
-      name: 'Kitchen Fan',
+      name: 'Quạt nhà bếp',
       status: 'off',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'door-living-room',
-      name: 'Living Room Door',
+      name: 'Cửa phòng khách',
       status: 'off',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'door-bedroom',
-      name: 'Bedroom Door',
+      name: 'Cửa phòng ngủ',
       status: 'off',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'door-kitchen',
-      name: 'Kitchen Door',
+      name: 'Cửa nhà bếp',
       status: 'off',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'light-hallway',
-      name: 'Hallway Light',
+      name: 'Đèn hành lang',
       status: 'off',
       updatedAt: new Date().toISOString()
     }
@@ -110,7 +110,7 @@ const cloneMockState = (): DashboardSnapshot => ({
 
 const parseAxiosError = (error: unknown): string => {
   if (!axios.isAxiosError(error)) {
-    return 'Unknown error';
+    return 'Lỗi không xác định';
   }
 
   const statusCode = error.response?.status;
@@ -124,7 +124,7 @@ const parseAxiosError = (error: unknown): string => {
     return `HTTP ${statusCode}: ${detail}`;
   }
 
-  return `Network error: ${detail}`;
+  return `Lỗi mạng: ${detail}`;
 };
 
 export type DeviceAction = 'ON' | 'OFF';
@@ -139,6 +139,11 @@ export interface ControlDeviceResponse {
 }
 
 const toDeviceStatus = (action: DeviceAction): 'on' | 'off' => (action === 'ON' ? 'on' : 'off');
+
+const getActionLabel = (action: DeviceAction): string => (action === 'ON' ? 'bật' : 'tắt');
+
+const toSentenceDeviceName = (name: string): string =>
+  name ? name.charAt(0).toLocaleLowerCase('vi-VN') + name.slice(1) : name;
 
 const applyMockControl = (
   room: Esp32Room,
@@ -184,7 +189,7 @@ const sendEsp32ControlCommand = async (
     } catch (getError: unknown) {
       const postDetail = parseAxiosError(postError);
       const getDetail = parseAxiosError(getError);
-      throw new Error(`POST that bai (${postDetail}); GET that bai (${getDetail})`);
+      throw new Error(`POST thất bại (${postDetail}); GET thất bại (${getDetail})`);
     }
   }
 };
@@ -195,7 +200,7 @@ const controlDeviceWithPayload = async (
   if (USE_MOCK) {
     const parsed = extractRoomDeviceFromDeviceId(payload.deviceId);
     if (!parsed) {
-      throw new Error(`Khong map duoc deviceId sang room/device: ${payload.deviceId}`);
+      throw new Error(`Không ánh xạ được deviceId sang phòng/thiết bị: ${payload.deviceId}`);
     }
 
     return applyMockControl(parsed.room, parsed.device, payload.action === 'on' ? 'ON' : 'OFF');
@@ -203,7 +208,7 @@ const controlDeviceWithPayload = async (
 
   const parsed = extractRoomDeviceFromDeviceId(payload.deviceId);
   if (!parsed) {
-    throw new Error(`Khong map duoc deviceId sang room/device: ${payload.deviceId}`);
+    throw new Error(`Không ánh xạ được deviceId sang phòng/thiết bị: ${payload.deviceId}`);
   }
 
   try {
@@ -221,9 +226,9 @@ const controlDeviceWithPayload = async (
       baseURL: BASE_URL,
       payload,
       detail,
-      suggestion: 'Kiem tra deviceId, action, endpoint /control va phuong thuc HTTP firmware support (POST/GET).'
+      suggestion: 'Kiểm tra deviceId, action, endpoint /control và phương thức HTTP firmware hỗ trợ (POST/GET).'
     });
-    throw new Error(`Khong the dieu khien thiet bi. ${detail}`);
+    throw new Error(`Không thể điều khiển thiết bị. ${detail}`);
   }
 };
 
@@ -246,7 +251,7 @@ const controlDeviceWithRoomDevice = async (
         room: roomValue,
         device: deviceValue,
         action,
-        message: `[MOCK] Da ${action === 'ON' ? 'bat' : 'tat'} ${updated.name}.`,
+        message: `[Mẫu] Đã ${getActionLabel(action)} ${toSentenceDeviceName(updated.name)}.`,
         timestamp: new Date().toISOString()
       });
     });
@@ -262,7 +267,7 @@ const controlDeviceWithRoomDevice = async (
       room: roomValue,
       device: deviceValue,
       action,
-      message: `Da gui lenh ${action} cho ${buildDeviceName(roomValue, deviceValue)}.`,
+      message: `Đã gửi lệnh ${getActionLabel(action)} cho ${toSentenceDeviceName(buildDeviceName(roomValue, deviceValue))}.`,
       timestamp: new Date().toISOString()
     };
   } catch (error: unknown) {
@@ -271,9 +276,9 @@ const controlDeviceWithRoomDevice = async (
       baseURL: BASE_URL,
       payload: { room: roomValue, device: deviceValue, action },
       detail,
-      suggestion: 'Kiem tra IP ESP32, endpoint /control, ket noi mang, va phuong thuc firmware support (POST/GET).'
+      suggestion: 'Kiểm tra IP ESP32, endpoint /control, kết nối mạng và phương thức firmware hỗ trợ (POST/GET).'
     });
-    throw new Error(`Khong the dieu khien thiet bi. ${detail}`);
+    throw new Error(`Không thể điều khiển thiết bị. ${detail}`);
   }
 };
 
@@ -296,9 +301,9 @@ export const getDeviceState = async (): Promise<DashboardSnapshot> => {
     console.error('[getDeviceState] Loi goi /state', {
       baseURL: BASE_URL,
       detail,
-      suggestion: 'Kiem tra IP, cung mang Wi-Fi, endpoint /state va trang thai ESP32.'
+      suggestion: 'Kiểm tra IP, cùng mạng Wi-Fi, endpoint /state và trạng thái ESP32.'
     });
-    throw new Error(`Khong the lay du lieu /state. ${detail}`);
+    throw new Error(`Không thể lấy dữ liệu /state. ${detail}`);
   }
 };
 
@@ -329,7 +334,7 @@ export async function controlDevice(
   }
 
   if (!device || !action) {
-    throw new Error('Can truyen du room, device, action (ON/OFF).');
+    throw new Error('Cần truyền đủ phòng, thiết bị và hành động (BẬT/TẮT).');
   }
 
   return controlDeviceWithRoomDevice(roomOrPayload, device, action);
@@ -346,11 +351,11 @@ export const triggerBackendCommandLog = async (
     await backendClient.post('/api/history/log', payload);
   } catch (error: unknown) {
     const detail = parseAxiosError(error);
-    console.error('[triggerBackendCommandLog] Loi gui history log', {
+    console.error('[triggerBackendCommandLog] Lỗi gửi log lịch sử', {
       payload,
       detail,
-      suggestion: 'Kiem tra backend endpoint /api/history/log va ket noi mang.'
+      suggestion: 'Kiểm tra backend endpoint /api/history/log và kết nối mạng.'
     });
-    throw new Error(`Khong the ghi log lich su len backend. ${detail}`);
+    throw new Error(`Không thể ghi log lịch sử lên máy chủ. ${detail}`);
   }
 };

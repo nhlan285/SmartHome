@@ -19,12 +19,13 @@ import { connectWebSocket } from '@/services/realtime/websocketService';
 import { DashboardSnapshot } from '@/types/models';
 import {
   buildDeviceId,
+  buildDeviceName,
   Esp32Device,
   Esp32Room,
   extractRoomDeviceFromDeviceId
 } from '@/services/api/esp32Contract';
 import { theme } from '@/styles/theme';
-import { getDeviceKindLabel, getRoomLabel, ROOM_ORDER } from '@/utils/deviceRooms';
+import { getDeviceKindLabel, getDeviceStatusLabel, getRoomLabel, ROOM_ORDER } from '@/utils/deviceRooms';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Control'>;
 
@@ -48,13 +49,13 @@ const GAS_ALERT_THRESHOLD = 1500;
 // Toan bo lenh dieu khien deu di qua service controlDevice(...)
 // de de dang chuyen giua mock mode va real API mode tai 1 diem duy nhat.
 const DEFAULT_CONTROL_TARGETS: ControlTarget[] = [
-  { room: 'living', device: 'light', label: 'Living room light' },
-  { room: 'living', device: 'fan', label: 'Living room fan' },
-  { room: 'bedroom', device: 'light', label: 'Bedroom light' },
-  { room: 'bedroom', device: 'fan', label: 'Bedroom fan' },
-  { room: 'kitchen', device: 'light', label: 'Kitchen light' },
-  { room: 'kitchen', device: 'fan', label: 'Kitchen fan' },
-  { room: 'hallway', device: 'light', label: 'Hallway light' }
+  { room: 'living', device: 'light', label: 'Đèn phòng khách' },
+  { room: 'living', device: 'fan', label: 'Quạt phòng khách' },
+  { room: 'bedroom', device: 'light', label: 'Đèn phòng ngủ' },
+  { room: 'bedroom', device: 'fan', label: 'Quạt phòng ngủ' },
+  { room: 'kitchen', device: 'light', label: 'Đèn nhà bếp' },
+  { room: 'kitchen', device: 'fan', label: 'Quạt nhà bếp' },
+  { room: 'hallway', device: 'light', label: 'Đèn hành lang' }
 ];
 
 const groupControlTargetsByRoom = (
@@ -78,7 +79,7 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
   const { isDarkMode } = useAppSettings();
   const [isSending, setIsSending] = useState(false);
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
-  const [currentTarget, setCurrentTarget] = useState('Chua co thao tac nao');
+  const [currentTarget, setCurrentTarget] = useState('Chưa có thao tác nào');
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isGasAlertModalVisible, setIsGasAlertModalVisible] = useState(false);
@@ -111,7 +112,7 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
         return {
           room: parsed.room,
           device: parsed.device,
-          label: item.name || `${parsed.room} ${parsed.device}`
+          label: buildDeviceName(parsed.room, parsed.device)
         } as ControlTarget;
       })
       .filter((item): item is ControlTarget => item !== null);
@@ -144,7 +145,7 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
         }
       } catch (error: unknown) {
         if (isMounted) {
-          const message = error instanceof Error ? error.message : 'Khong the tai du lieu ESP32.';
+          const message = error instanceof Error ? error.message : 'Không thể tải dữ liệu ESP32.';
           setErrorMessage(message);
         }
       }
@@ -198,7 +199,7 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
     device: Esp32Device,
     action: DeviceAction
   ): Promise<void> => {
-    const target = `${room} - ${device} (${action})`;
+    const target = `${getRoomLabel(room)} - ${getDeviceKindLabel(device)} (${action === 'ON' ? 'Bật' : 'Tắt'})`;
     setCurrentTarget(target);
     setIsSending(true);
     setSuccessMessage('');
@@ -209,14 +210,14 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
       setSuccessMessage(result.message);
       syncLocalStatus(room, device, action);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Gui lenh that bai.';
+      const message = error instanceof Error ? error.message : 'Gửi lệnh thất bại.';
       setErrorMessage(message);
 
       // Debug nhanh khi API loi:
       // - Kiem tra USE_MOCK trong deviceApi.ts.
       // - Neu USE_MOCK=false, kiem tra IP ESP32 va endpoint /control.
       // - Kiem tra dien thoai/emulator co cung mang voi server hay khong.
-      console.error('[ControlScreen] Loi dieu khien thiet bi', {
+      console.error('[ControlScreen] Lỗi điều khiển thiết bị', {
         room,
         device,
         action,
@@ -232,22 +233,22 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.caption}>Device Control</Text>
-            <Text style={styles.title}>Operational Status</Text>
+            <Text style={styles.caption}>Điều khiển thiết bị</Text>
+            <Text style={styles.title}>Trạng thái hoạt động</Text>
           </View>
           <View style={styles.headerDot} />
         </View>
 
-        <Text style={styles.subTitle}>Dang dieu khien: {currentTarget}</Text>
+        <Text style={styles.subTitle}>Đang điều khiển: {currentTarget}</Text>
 
         {isGasDanger ? (
           <Pressable
             style={styles.gasWarningBanner}
             onPress={() => setIsGasAlertModalVisible(true)}
           >
-            <Text style={styles.gasWarningTitle}>CANH BAO GAS NGUY HIEM</Text>
+            <Text style={styles.gasWarningTitle}>CẢNH BÁO KHÍ GAS NGUY HIỂM</Text>
             <Text style={styles.gasWarningBody}>
-              Gas hien tai: {gasValue} ppm (nguong canh bao: {GAS_ALERT_THRESHOLD} ppm)
+              Khí gas hiện tại: {gasValue} ppm (ngưỡng cảnh báo: {GAS_ALERT_THRESHOLD} ppm)
             </Text>
           </Pressable>
         ) : null}
@@ -259,7 +260,7 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
         {isSending ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator color={theme.colors.primary} />
-            <Text style={styles.loadingText}>Dang gui lenh dieu khien...</Text>
+            <Text style={styles.loadingText}>Đang gửi lệnh điều khiển...</Text>
           </View>
         ) : null}
 
@@ -273,7 +274,7 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
                 <View>
                   <Text style={styles.roomTitle}>{group.label}</Text>
                   <Text style={styles.roomMeta}>
-                    {group.onCount}/{group.totalCount} thiet bi dang bat
+                    {group.onCount}/{group.totalCount} thiết bị đang bật
                   </Text>
                 </View>
                 <View style={styles.roomCountBadge}>
@@ -298,7 +299,9 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
                           <Text style={styles.deviceName} numberOfLines={2}>
                             {target.label}
                           </Text>
-                          <Text style={styles.deviceMeta}>Trang thai: {currentStatus}</Text>
+                          <Text style={styles.deviceMeta}>
+                            Trạng thái: {getDeviceStatusLabel(currentStatus)}
+                          </Text>
                         </View>
                         <View style={[styles.deviceMarker, isOn && styles.deviceMarkerOn]} />
                       </View>
@@ -315,7 +318,7 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
                             void handleControl(target.room, target.device, 'ON');
                           }}
                         >
-                          <Text style={styles.actionText}>ON</Text>
+                          <Text style={styles.actionText}>Bật</Text>
                         </Pressable>
 
                         <Pressable
@@ -329,7 +332,7 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
                             void handleControl(target.room, target.device, 'OFF');
                           }}
                         >
-                          <Text style={styles.actionText}>OFF</Text>
+                          <Text style={styles.actionText}>Tắt</Text>
                         </Pressable>
                       </View>
                     </View>
@@ -349,16 +352,16 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>CANH BAO KHI GAS</Text>
+            <Text style={styles.modalTitle}>CẢNH BÁO KHÍ GAS</Text>
             <Text style={styles.modalValue}>{gasValue ?? '--'} ppm</Text>
             <Text style={styles.modalMessage}>
-              Gas vuot nguong {GAS_ALERT_THRESHOLD} ppm. Buzzer tren phan cung da kich hoat.
+              Khí gas vượt ngưỡng {GAS_ALERT_THRESHOLD} ppm. Còi cảnh báo trên phần cứng đã kích hoạt.
             </Text>
             <Pressable
               style={styles.modalButton}
               onPress={() => setIsGasAlertModalVisible(false)}
             >
-              <Text style={styles.modalButtonText}>Da hieu</Text>
+              <Text style={styles.modalButtonText}>Đã hiểu</Text>
             </Pressable>
           </View>
         </View>

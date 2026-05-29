@@ -8,6 +8,9 @@ interface HistoryListProps {
   history: ControlHistoryItem[];
 }
 
+const getHistoryStatusLabel = (status: ControlHistoryItem['status']): string =>
+  status === 'success' ? 'Thành công' : 'Thất bại';
+
 export const HistoryList: React.FC<HistoryListProps> = ({ history }) => (
   <FlatList
     data={history}
@@ -15,9 +18,9 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history }) => (
     contentContainerStyle={styles.listContent}
     ListHeaderComponent={
       <View style={styles.tableHeader}>
-        <Text style={[styles.headCell, styles.headCellDevice]}>Command</Text>
-        <Text style={styles.headCell}>Status</Text>
-        <Text style={styles.headCell}>Time</Text>
+        <Text style={[styles.headCell, styles.headCellDevice]}>Lệnh</Text>
+        <Text style={styles.headCell}>Trạng thái</Text>
+        <Text style={styles.headCell}>Thời gian</Text>
       </View>
     }
     renderItem={({ item }) => (
@@ -26,14 +29,14 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history }) => (
           {item.commandText}
         </Text>
         <View style={[styles.badge, item.status === 'success' ? styles.success : styles.failed]}>
-          <Text style={styles.badgeText}>{item.status.toUpperCase()}</Text>
+          <Text style={styles.badgeText}>{getHistoryStatusLabel(item.status)}</Text>
         </View>
         <Text style={styles.cellText} numberOfLines={1}>
           {formatDateTime(item.timestamp)}
         </Text>
       </View>
     )}
-    ListEmptyComponent={<Text style={styles.empty}>No control history yet.</Text>}
+    ListEmptyComponent={<Text style={styles.empty}>Chưa có lịch sử điều khiển.</Text>}
   />
 );
 

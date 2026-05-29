@@ -19,7 +19,7 @@ export const processVoiceCommand = async (audioUri: string): Promise<VoiceComman
   }
 
   if (!audioUri) {
-    throw new Error('audioUri khong hop le. Ban can ghi am truoc khi gui.');
+    throw new Error('audioUri không hợp lệ. Bạn cần ghi âm trước khi gửi.');
   }
 
   try {
@@ -35,22 +35,22 @@ export const processVoiceCommand = async (audioUri: string): Promise<VoiceComman
     });
 
     if (!response.data || !response.data.intent || !response.data.transcript) {
-      throw new Error('Backend tra ve du lieu voice khong dung dinh dang mong doi.');
+      throw new Error('Máy chủ trả về dữ liệu giọng nói không đúng định dạng mong đợi.');
     }
 
     return response.data;
   } catch (error: unknown) {
     const detail = axios.isAxiosError(error)
-      ? `${error.response?.status ? `HTTP ${error.response.status}` : 'Network error'}: ${error.message}`
-      : 'Unknown error';
+      ? `${error.response?.status ? `HTTP ${error.response.status}` : 'Lỗi mạng'}: ${error.message}`
+      : 'Lỗi không xác định';
 
-    console.error('[processVoiceCommand] Loi gui voice', {
+    console.error('[processVoiceCommand] Lỗi gửi giọng nói', {
       apiPath: API_PATHS.voiceProcess,
       audioUri,
       detail,
-      suggestion: 'Kiem tra endpoint backend, ket noi mang, va file ghi am hop le.'
+      suggestion: 'Kiểm tra endpoint backend, kết nối mạng và tệp ghi âm hợp lệ.'
     });
 
-    throw new Error(`Khong the xu ly lenh giong noi. ${detail}`);
+    throw new Error(`Không thể xử lý lệnh giọng nói. ${detail}`);
   }
 };

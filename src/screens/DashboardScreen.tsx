@@ -19,7 +19,7 @@ import { getDeviceState } from '@/services/api/deviceApi';
 import { connectWebSocket } from '@/services/realtime/websocketService';
 import { theme } from '@/styles/theme';
 import { DashboardSnapshot } from '@/types/models';
-import { getDeviceKindLabel, groupDevicesByRoom } from '@/utils/deviceRooms';
+import { getDeviceKindLabel, getDeviceStatusLabel, groupDevicesByRoom } from '@/utils/deviceRooms';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
 const GAS_ALERT_THRESHOLD = 1500;
@@ -49,7 +49,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
       const data = await getDeviceState();
       setSnapshot(data);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Khong the refresh dashboard.';
+      const message = err instanceof Error ? err.message : 'Không thể làm mới bảng điều khiển.';
       setError(message);
     }
   };
@@ -65,7 +65,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
           setSnapshot(data);
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Khong the tai state ban dau.';
+        const message = err instanceof Error ? err.message : 'Không thể tải trạng thái ban đầu.';
         if (isMounted) {
           setError(message);
         }
@@ -106,13 +106,13 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
       <SafeAreaView style={[styles.safeArea, isDarkMode && styles.safeAreaDark]}>
         <View style={styles.centerBox}>
           <ActivityIndicator color={theme.colors.primary} />
-          <Text style={styles.loadingText}>Dang tai du lieu dashboard...</Text>
+          <Text style={styles.loadingText}>Đang tải dữ liệu tổng quan...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const cityDate = new Date().toLocaleDateString('en-GB', {
+  const cityDate = new Date().toLocaleDateString('vi-VN', {
     day: '2-digit',
     month: 'short',
     year: 'numeric'
@@ -129,11 +129,11 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.greeting}>Good Evening,</Text>
-            <Text style={styles.title}>Smart Home</Text>
+            <Text style={styles.greeting}>Xin chào,</Text>
+            <Text style={styles.title}>Nhà thông minh</Text>
           </View>
           <Pressable
-            accessibilityLabel="Open settings"
+            accessibilityLabel="Mở cài đặt"
             accessibilityRole="button"
             style={styles.headerIcon}
             onPress={() => setIsSettingsVisible(true)}
@@ -147,7 +147,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
         <View style={[styles.climateCard, isGasDanger && styles.climateCardDanger]}>
           <View style={styles.climateTopRow}>
             <Text style={styles.cityText}>
-              In <Text style={styles.cityAccent}>Da Nang</Text>
+              Tại <Text style={styles.cityAccent}>Đà Nẵng</Text>
             </Text>
             <Text style={styles.dateText}>{cityDate}</Text>
           </View>
@@ -155,45 +155,45 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
 
           <View style={styles.metricRow}>
             <View style={styles.metricBox}>
-              <Text style={styles.metricLabel}>Temperature</Text>
+              <Text style={styles.metricLabel}>Nhiệt độ</Text>
               <Text style={styles.metricValue}>{temperature}°C</Text>
             </View>
             <View style={[styles.metricBox, styles.metricHighlight]}>
-              <Text style={styles.metricLabelLight}>Humidity</Text>
+              <Text style={styles.metricLabelLight}>Độ ẩm</Text>
               <Text style={styles.metricValueLight}>{humidity}%</Text>
             </View>
             <View style={[styles.metricBox, isGasDanger && styles.metricGasDanger]}>
-              <Text style={styles.metricLabel}>Gas</Text>
+              <Text style={styles.metricLabel}>Khí gas</Text>
               <Text style={[styles.metricValue, isGasDanger && styles.metricGasValueDanger]}>{gas}</Text>
             </View>
           </View>
 
-          <Text style={styles.noteText}>Realtime update: {lastUpdated}</Text>
+          <Text style={styles.noteText}>Cập nhật thời gian thực: {lastUpdated}</Text>
 
           {isGasDanger ? (
             <Pressable
               style={styles.gasWarningBanner}
               onPress={() => setIsGasAlertModalVisible(true)}
             >
-              <Text style={styles.gasWarningTitle}>CANH BAO: KHI GAS VUOT NGUONG</Text>
+              <Text style={styles.gasWarningTitle}>CẢNH BÁO: KHÍ GAS VƯỢT NGƯỠNG</Text>
               <Text style={styles.gasWarningBody}>
-                Gas hien tai {gasNumber} ppm, lon hon nguong {GAS_ALERT_THRESHOLD} ppm.
+                Khí gas hiện tại {gasNumber} ppm, lớn hơn ngưỡng {GAS_ALERT_THRESHOLD} ppm.
               </Text>
             </Pressable>
           ) : null}
         </View>
 
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Smart Devices</Text>
+          <Text style={styles.sectionTitle}>Thiết bị thông minh</Text>
           <Pressable onPress={() => void refreshState()}>
-            <Text style={styles.refreshText}>Refresh</Text>
+            <Text style={styles.refreshText}>Làm mới</Text>
           </Pressable>
         </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {roomGroups.length === 0 ? (
-          <Text style={styles.noteText}>Chua co du lieu trang thai thiet bi.</Text>
+          <Text style={styles.noteText}>Chưa có dữ liệu trạng thái thiết bị.</Text>
         ) : null}
 
         <View style={styles.roomList}>
@@ -203,7 +203,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                 <View>
                   <Text style={styles.roomTitle}>{group.label}</Text>
                   <Text style={styles.roomMeta}>
-                    {group.onCount}/{group.totalCount} thiet bi dang bat
+                    {group.onCount}/{group.totalCount} thiết bị đang bật
                   </Text>
                 </View>
                 <View style={styles.roomCountBadge}>
@@ -214,7 +214,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
               <View style={styles.deviceGrid}>
                 {group.devices.map((item) => {
                   const isOn = item.device.status === 'on';
-                  const status = item.device.status.toUpperCase();
+                  const status = getDeviceStatusLabel(item.device.status);
 
                   return (
                     <View
@@ -247,16 +247,16 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>CANH BAO KHI GAS</Text>
+            <Text style={styles.modalTitle}>CẢNH BÁO KHÍ GAS</Text>
             <Text style={styles.modalValue}>{gasNumber ?? '--'} ppm</Text>
             <Text style={styles.modalMessage}>
-              He thong da nhan muc gas vuot nguong an toan ({GAS_ALERT_THRESHOLD} ppm).
+              Hệ thống đã nhận mức khí gas vượt ngưỡng an toàn ({GAS_ALERT_THRESHOLD} ppm).
             </Text>
             <Pressable
               style={styles.modalButton}
               onPress={() => setIsGasAlertModalVisible(false)}
             >
-              <Text style={styles.modalButtonText}>Da hieu</Text>
+              <Text style={styles.modalButtonText}>Đã hiểu</Text>
             </Pressable>
           </View>
         </View>
@@ -273,10 +273,10 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.settingsHeaderRow}>
               <View>
                 <Text style={[styles.settingsTitle, isDarkMode && styles.settingsTextDark]}>
-                  Settings
+                  Cài đặt
                 </Text>
                 <Text style={styles.settingsSubtitle}>
-                  {isSettingsReady ? 'Da dong bo local' : 'Dang doc cai dat...'}
+                  {isSettingsReady ? 'Đã đồng bộ cục bộ' : 'Đang đọc cài đặt...'}
                 </Text>
               </View>
               <Pressable style={styles.settingsCloseButton} onPress={() => setIsSettingsVisible(false)}>
@@ -288,7 +288,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
 
             <View style={styles.settingsSection}>
               <Text style={[styles.settingsLabel, isDarkMode && styles.settingsTextDark]}>
-                Giao dien
+                Giao diện
               </Text>
               <Pressable
                 style={[styles.modeToggle, isDarkMode && styles.modeToggleDark]}
@@ -306,7 +306,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                       colorMode === 'light' && styles.modeOptionTextActive
                     ]}
                   >
-                    Sang
+                    Sáng
                   </Text>
                 </View>
                 <View
@@ -318,7 +318,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                       colorMode === 'dark' && styles.modeOptionTextActive
                     ]}
                   >
-                    Toi
+                    Tối
                   </Text>
                 </View>
               </Pressable>
@@ -326,7 +326,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
 
             <View style={styles.settingsSection}>
               <Text style={[styles.settingsLabel, isDarkMode && styles.settingsTextDark]}>
-                Wi-Fi ID
+                Mã Wi-Fi
               </Text>
               <View style={styles.settingsInputRow}>
                 <TextInput
@@ -337,20 +337,20 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                   placeholderTextColor={theme.colors.textSecondary}
                 />
                 <Pressable style={styles.resetWifiButton} onPress={resetWifiId}>
-                  <Text style={styles.resetWifiButtonText}>Reset</Text>
+                  <Text style={styles.resetWifiButtonText}>Đặt lại</Text>
                 </Pressable>
               </View>
             </View>
 
             <View style={styles.settingsSection}>
               <Text style={[styles.settingsLabel, isDarkMode && styles.settingsTextDark]}>
-                Tai khoan
+                Tài khoản
               </Text>
               <TextInput
                 style={[styles.settingsInput, isDarkMode && styles.settingsInputDark]}
                 value={profile.displayName}
                 onChangeText={(displayName) => updateProfile({ ...profile, displayName })}
-                placeholder="Ten tai khoan"
+                placeholder="Tên tài khoản"
                 placeholderTextColor={theme.colors.textSecondary}
               />
               <View style={styles.avatarRow}>

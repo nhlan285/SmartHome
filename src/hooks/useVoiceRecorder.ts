@@ -21,7 +21,7 @@ export const useVoiceRecorder = (): VoiceRecorderState => {
       setError(null);
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
-        throw new Error('Microphone permission is required.');
+        throw new Error('Ứng dụng cần quyền micro.');
       }
 
       await Audio.setAudioModeAsync({
@@ -35,7 +35,7 @@ export const useVoiceRecorder = (): VoiceRecorderState => {
       setRecording(created);
       setIsRecording(true);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to start recording.';
+      const message = err instanceof Error ? err.message : 'Không thể bắt đầu ghi âm.';
       setError(message);
     }
   };
@@ -53,7 +53,7 @@ export const useVoiceRecorder = (): VoiceRecorderState => {
       setIsRecording(false);
       return uri;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to stop recording.';
+      const message = err instanceof Error ? err.message : 'Không thể dừng ghi âm.';
       setError(message);
       setRecording(null);
       setIsRecording(false);

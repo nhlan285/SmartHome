@@ -8,37 +8,37 @@ export const MOCK_DEVICE_STATE: DashboardSnapshot = {
   devices: [
     {
       deviceId: 'light-living-room',
-      name: 'Living Room Light',
+      name: 'Đèn phòng khách',
       status: 'on',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'fan-living-room',
-      name: 'Living Room Fan',
+      name: 'Quạt phòng khách',
       status: 'off',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'light-bedroom',
-      name: 'Bedroom Light',
+      name: 'Đèn phòng ngủ',
       status: 'off',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'fan-bedroom',
-      name: 'Bedroom Fan',
+      name: 'Quạt phòng ngủ',
       status: 'on',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'light-kitchen',
-      name: 'Kitchen Light',
+      name: 'Đèn nhà bếp',
       status: 'on',
       updatedAt: new Date().toISOString()
     },
     {
       deviceId: 'fan-kitchen',
-      name: 'Kitchen Fan',
+      name: 'Quạt nhà bếp',
       status: 'off',
       updatedAt: new Date().toISOString()
     }
