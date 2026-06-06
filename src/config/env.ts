@@ -10,11 +10,11 @@
 
   1) BACKEND_BASE_URL
     - API server AI + thiết bị + lịch sử.
-    - Ví dụ: http://172.20.10.4:8000
+    - Ví dụ: https://dean-habitat-eatable.ngrok-free.dev
 
   2) BACKEND_WS_URL
     - WebSocket realtime từ server nếu backend hỗ trợ.
-    - Ví dụ: ws://172.20.10.4:8000/ws/devices
+    - Ví dụ: wss://dean-habitat-eatable.ngrok-free.dev/ws
 
   3) USE_MOCKS
     - true  : test mock, không gọi server thật.
@@ -29,8 +29,8 @@
   - POST /api/devices/control
     Body: { deviceId, room, device, action }
     Trả snapshot trạng thái mới nhất sau khi ESP32 đổi trạng thái.
-  - POST /api/voice/process
-    multipart/form-data field audio
+  - POST /api/voice-audio
+    multipart/form-data field file
     Trả transcript/intent và snapshot trạng thái mới nhất sau lệnh voice.
   - GET  /api/history
     Trả lịch sử lệnh voice/dashboard từ database.
@@ -61,8 +61,8 @@ const normalizeWebSocketUrl = (url: string): string => {
 };
 
 const RAW_ENV = {
-  BACKEND_BASE_URL: 'http://172.20.10.4:8000',
-  BACKEND_WS_URL: 'ws://172.20.10.4:8000/ws/devices',
+  BACKEND_BASE_URL: 'https://recount-remnant-bagging.ngrok-free.dev',
+  BACKEND_WS_URL: 'wss://recount-remnant-bagging.ngrok-free.dev/ws',
   USE_MOCKS: false
 } as const;
 
@@ -75,6 +75,6 @@ export const ENV = {
 export const API_PATHS = {
   deviceState: '/api/devices/state',
   deviceControl: '/api/devices/control',
-  voiceProcess: '/api/voice/process',
+  voiceProcess: '/api/voice-audio',
   history: '/api/history'
 } as const;

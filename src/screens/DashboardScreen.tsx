@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import {
   ActivityIndicator,
   Modal,
@@ -12,17 +13,77 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppNavBar } from '@/components/AppNavBar';
-import { VoicePrimaryButton } from '@/components/VoicePrimaryButton';
 import { useAppSettings } from '@/context/AppSettingsContext';
 import { RootStackParamList } from '@/navigation/AppNavigator';
 import { getDeviceState } from '@/services/api/deviceApi';
 import { connectWebSocket } from '@/services/realtime/websocketService';
 import { theme } from '@/styles/theme';
 import { DashboardSnapshot } from '@/types/models';
-import { getDeviceKindLabel, getDeviceStatusLabel, groupDevicesByRoom } from '@/utils/deviceRooms';
+import {
+  getDeviceKindLabel,
+  getDeviceStatusLabel,
+  groupDevicesByRoom,
+  RoomDeviceItem
+} from '@/utils/deviceRooms';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
+
+type DeviceTile = {
+  groupLabel: string;
+  item: RoomDeviceItem;
+};
+
 const GAS_ALERT_THRESHOLD = 1500;
+
+const getGreeting = (): string => {
+  const hour = new Date().getHours();
+
+  if (hour < 11) {
+    return 'Chào buổi sáng,';
+  }
+
+  if (hour < 18) {
+    return 'Chào buổi chiều,';
+  }
+
+  return 'Chào buổi tối,';
+};
+
+const getWeatherNote = (temperature?: number): string => {
+  if (typeof temperature !== 'number') {
+    return 'Đang cập nhật';
+  }
+
+  if (temperature >= 30) {
+    return 'Nóng';
+  }
+
+  if (temperature >= 26) {
+    return 'Ấm áp';
+  }
+
+  if (temperature >= 20) {
+    return 'Dễ chịu';
+  }
+
+  return 'Mát';
+};
+
+const getDeviceIcon = (kind: RoomDeviceItem['kind']): keyof typeof MaterialIcons.glyphMap => {
+  if (kind === 'light') {
+    return 'lightbulb';
+  }
+
+  if (kind === 'fan') {
+    return 'air';
+  }
+
+  if (kind === 'door') {
+    return 'meeting-room';
+  }
+
+  return 'settings-remote';
+};
 
 export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
@@ -79,7 +140,6 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
     void loadInitialState();
 
     const unsubscribe = connectWebSocket((realtimeData) => {
-      // Neu khong setState tai callback, UI se khong tu update theo realtime.
       setSnapshot(realtimeData);
     });
 
@@ -89,9 +149,8 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
     };
   }, []);
 
-  const temperature = snapshot?.sensors.temperatureC ?? '-';
-  const humidity = snapshot?.sensors.humidityPercent ?? '-';
-  const gas = snapshot?.sensors.gasPpm ?? '-';
+  const temperature = snapshot?.sensors.temperatureC;
+  const humidity = snapshot?.sensors.humidityPercent;
   const gasNumber = snapshot?.sensors.gasPpm;
   const isGasDanger = typeof gasNumber === 'number' && gasNumber > GAS_ALERT_THRESHOLD;
 
@@ -100,6 +159,33 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
       setIsGasAlertModalVisible(true);
     }
   }, [isGasDanger]);
+
+  const cityDate = new Date().toLocaleDateString('vi-VN', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
+
+  const roomGroups = useMemo(() => groupDevicesByRoom(snapshot?.devices ?? []), [snapshot]);
+  const deviceTiles = useMemo<DeviceTile[]>(
+    () =>
+      roomGroups.reduce<DeviceTile[]>((items, group) => {
+        group.devices.forEach((item) => {
+          items.push({ groupLabel: group.label, item });
+        });
+        return items;
+      }, []),
+    [roomGroups]
+  );
+  const allDevicesCount = deviceTiles.length;
+  const activeDevicesCount = deviceTiles.filter(({ item }) => item.device.status === 'on').length;
+
+  const lastUpdated = snapshot?.sensors.updatedAt
+    ? new Date(snapshot.sensors.updatedAt).toLocaleTimeString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    : '--:--';
 
   if (isLoading) {
     return (
@@ -112,24 +198,12 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
     );
   }
 
-  const cityDate = new Date().toLocaleDateString('vi-VN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  });
-
-  const roomGroups = groupDevicesByRoom(snapshot?.devices ?? []);
-
-  const lastUpdated = snapshot?.sensors.updatedAt
-    ? new Date(snapshot.sensors.updatedAt).toLocaleTimeString()
-    : '--:--';
-
   return (
     <SafeAreaView style={[styles.safeArea, isDarkMode && styles.safeAreaDark]}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.greeting}>Xin chào,</Text>
+            <Text style={styles.greeting}>{getGreeting()}</Text>
             <Text style={styles.title}>Nhà thông minh</Text>
           </View>
           <Pressable
@@ -138,44 +212,59 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
             style={styles.headerIcon}
             onPress={() => setIsSettingsVisible(true)}
           >
-            <Text style={styles.headerIconText}>{profile.avatarInitial}</Text>
+            <MaterialIcons name="notifications" size={24} color="#CAD0D5" />
           </Pressable>
         </View>
-
-        <VoicePrimaryButton navigation={navigation} />
 
         <View style={[styles.climateCard, isGasDanger && styles.climateCardDanger]}>
           <View style={styles.climateTopRow}>
             <Text style={styles.cityText}>
-              Tại <Text style={styles.cityAccent}>Đà Nẵng</Text>
+              Ở <Text style={styles.cityAccent}>Đà Nẵng</Text>
             </Text>
             <Text style={styles.dateText}>{cityDate}</Text>
           </View>
           <View style={styles.divider} />
 
           <View style={styles.metricRow}>
-            <View style={styles.metricBox}>
+            <View style={styles.temperatureBox}>
               <Text style={styles.metricLabel}>Nhiệt độ</Text>
-              <Text style={styles.metricValue}>{temperature}°C</Text>
+              <Text style={styles.temperatureValue}>
+                {typeof temperature === 'number' ? Math.round(temperature) : '-'}°
+              </Text>
+              <Text style={styles.warmText}>{getWeatherNote(temperature)}</Text>
             </View>
-            <View style={[styles.metricBox, styles.metricHighlight]}>
+
+            <View style={styles.humidityBox}>
               <Text style={styles.metricLabelLight}>Độ ẩm</Text>
-              <Text style={styles.metricValueLight}>{humidity}%</Text>
-            </View>
-            <View style={[styles.metricBox, isGasDanger && styles.metricGasDanger]}>
-              <Text style={styles.metricLabel}>Khí gas</Text>
-              <Text style={[styles.metricValue, isGasDanger && styles.metricGasValueDanger]}>{gas}</Text>
+              <Text style={styles.humidityValue}>
+                {typeof humidity === 'number' ? Math.round(humidity) : '-'}%
+              </Text>
+              <Text style={styles.humidityText}>Bình thường</Text>
             </View>
           </View>
 
-          <Text style={styles.noteText}>Cập nhật thời gian thực: {lastUpdated}</Text>
+          <View style={[styles.gasStrip, isGasDanger && styles.gasStripDanger]}>
+            <View style={styles.gasLeft}>
+              <MaterialIcons
+                name="local-fire-department"
+                size={18}
+                color={isGasDanger ? theme.colors.danger : theme.colors.warning}
+              />
+              <Text style={[styles.gasText, isGasDanger && styles.gasTextDanger]}>
+                Khí gas: {typeof gasNumber === 'number' ? Math.round(gasNumber) : '--'} ppm
+              </Text>
+            </View>
+            <Text style={[styles.gasMeta, isGasDanger && styles.gasTextDanger]}>
+              {isGasDanger ? 'Nguy hiểm' : `Cập nhật ${lastUpdated}`}
+            </Text>
+          </View>
 
           {isGasDanger ? (
             <Pressable
               style={styles.gasWarningBanner}
               onPress={() => setIsGasAlertModalVisible(true)}
             >
-              <Text style={styles.gasWarningTitle}>CẢNH BÁO: KHÍ GAS VƯỢT NGƯỠNG</Text>
+              <Text style={styles.gasWarningTitle}>CẢNH BÁO KHÍ GAS VƯỢT NGƯỠNG</Text>
               <Text style={styles.gasWarningBody}>
                 Khí gas hiện tại {gasNumber} ppm, lớn hơn ngưỡng {GAS_ALERT_THRESHOLD} ppm.
               </Text>
@@ -185,59 +274,69 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
 
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Thiết bị thông minh</Text>
-          <Pressable onPress={() => void refreshState()}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              void refreshState();
+            }}
+          >
             <Text style={styles.refreshText}>Làm mới</Text>
           </Pressable>
         </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        {roomGroups.length === 0 ? (
+        <View style={styles.allDevicesCard}>
+          <View>
+            <Text style={styles.allDevicesTitle}>Tất cả thiết bị</Text>
+            <Text style={styles.allDevicesMeta}>
+              {activeDevicesCount}/{allDevicesCount} thiết bị đang bật
+            </Text>
+          </View>
+          <View style={[styles.switchTrack, activeDevicesCount > 0 && styles.switchTrackOn]}>
+            <View style={[styles.switchThumb, activeDevicesCount > 0 && styles.switchThumbOn]} />
+          </View>
+        </View>
+
+        {deviceTiles.length === 0 ? (
           <Text style={styles.noteText}>Chưa có dữ liệu trạng thái thiết bị.</Text>
         ) : null}
 
-        <View style={styles.roomList}>
-          {roomGroups.map((group) => (
-            <View key={group.room} style={styles.roomCard}>
-              <View style={styles.roomHeaderRow}>
-                <View>
-                  <Text style={styles.roomTitle}>{group.label}</Text>
-                  <Text style={styles.roomMeta}>
-                    {group.onCount}/{group.totalCount} thiết bị đang bật
-                  </Text>
-                </View>
-                <View style={styles.roomCountBadge}>
-                  <Text style={styles.roomCountText}>{group.totalCount}</Text>
-                </View>
-              </View>
+        <View style={styles.deviceGrid}>
+          {deviceTiles.map(({ groupLabel, item }) => {
+            const isOn = item.device.status === 'on';
 
-              <View style={styles.deviceGrid}>
-                {group.devices.map((item) => {
-                  const isOn = item.device.status === 'on';
-                  const status = getDeviceStatusLabel(item.device.status);
+            return (
+              <View key={item.device.deviceId} style={[styles.deviceTile, isOn && styles.deviceTileActive]}>
+                <View style={styles.deviceTopRow}>
+                  <View style={[styles.deviceIconBox, isOn && styles.deviceIconBoxActive]}>
+                    <MaterialIcons
+                      name={getDeviceIcon(item.kind)}
+                      size={28}
+                      color={theme.colors.primary}
+                    />
+                  </View>
+                  <View style={[styles.miniSwitchTrack, isOn && styles.miniSwitchTrackOn]}>
+                    <View style={[styles.miniSwitchThumb, isOn && styles.miniSwitchThumbOn]} />
+                  </View>
+                </View>
 
-                  return (
-                    <View
-                      key={item.device.deviceId}
-                      style={[styles.deviceCard, isOn && styles.deviceCardActive]}
-                    >
-                      <Text style={styles.deviceType}>{getDeviceKindLabel(item.kind)}</Text>
-                      <Text style={styles.deviceTitle} numberOfLines={2}>
-                        {item.device.name}
-                      </Text>
-                      <View style={[styles.statusBadge, isOn ? styles.statusOn : styles.statusOff]}>
-                        <Text style={styles.statusText}>{status}</Text>
-                      </View>
-                    </View>
-                  );
-                })}
+                <Text style={[styles.deviceTitle, isOn && styles.deviceTitleActive]} numberOfLines={2}>
+                  {item.device.name}
+                </Text>
+                <Text style={[styles.deviceMeta, isOn && styles.deviceMetaActive]} numberOfLines={1}>
+                  {groupLabel} - {getDeviceStatusLabel(item.device.status)}
+                </Text>
+                <Text style={[styles.deviceKind, isOn && styles.deviceKindActive]}>
+                  {getDeviceKindLabel(item.kind)}
+                </Text>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
-
-        <AppNavBar navigation={navigation} currentRoute="Dashboard" />
       </ScrollView>
+
+      <AppNavBar navigation={navigation} currentRoute="Dashboard" />
 
       <Modal
         visible={isGasAlertModalVisible}
@@ -252,10 +351,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.modalMessage}>
               Hệ thống đã nhận mức khí gas vượt ngưỡng an toàn ({GAS_ALERT_THRESHOLD} ppm).
             </Text>
-            <Pressable
-              style={styles.modalButton}
-              onPress={() => setIsGasAlertModalVisible(false)}
-            >
+            <Pressable style={styles.modalButton} onPress={() => setIsGasAlertModalVisible(false)}>
               <Text style={styles.modalButtonText}>Đã hiểu</Text>
             </Pressable>
           </View>
@@ -280,7 +376,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                 </Text>
               </View>
               <Pressable style={styles.settingsCloseButton} onPress={() => setIsSettingsVisible(false)}>
-                <Text style={styles.settingsCloseText}>X</Text>
+                <MaterialIcons name="close" size={20} color={theme.colors.textPrimary} />
               </Pressable>
             </View>
 
@@ -294,12 +390,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                 style={[styles.modeToggle, isDarkMode && styles.modeToggleDark]}
                 onPress={toggleColorMode}
               >
-                <View
-                  style={[
-                    styles.modeOption,
-                    colorMode === 'light' && styles.modeOptionActive
-                  ]}
-                >
+                <View style={[styles.modeOption, colorMode === 'light' && styles.modeOptionActive]}>
                   <Text
                     style={[
                       styles.modeOptionText,
@@ -309,9 +400,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
                     Sáng
                   </Text>
                 </View>
-                <View
-                  style={[styles.modeOption, colorMode === 'dark' && styles.modeOptionActive]}
-                >
+                <View style={[styles.modeOption, colorMode === 'dark' && styles.modeOptionActive]}>
                   <Text
                     style={[
                       styles.modeOptionText,
@@ -325,9 +414,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             <View style={styles.settingsSection}>
-              <Text style={[styles.settingsLabel, isDarkMode && styles.settingsTextDark]}>
-                Mã Wi-Fi
-              </Text>
+              <Text style={[styles.settingsLabel, isDarkMode && styles.settingsTextDark]}>Mã Wi-Fi</Text>
               <View style={styles.settingsInputRow}>
                 <TextInput
                   style={[styles.settingsInput, isDarkMode && styles.settingsInputDark]}
@@ -383,8 +470,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#101D25'
   },
   container: {
-    padding: theme.spacing.md,
-    paddingBottom: theme.spacing.xl
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 156
   },
   centerBox: {
     flex: 1,
@@ -395,219 +483,297 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.md
+    marginBottom: 28
   },
   greeting: {
     color: theme.colors.textSecondary,
-    fontWeight: '600'
+    fontSize: 13,
+    fontWeight: '800'
   },
   title: {
-    fontSize: 34,
-    fontWeight: '800',
+    marginTop: 3,
     color: theme.colors.textPrimary,
-    marginTop: 2
+    fontSize: 25,
+    fontWeight: '900'
   },
   headerIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: '#E4EFED',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0E2736',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowColor: '#7FAAA6',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.16,
     shadowRadius: 6,
-    elevation: 2
-  },
-  headerIconText: {
-    color: theme.colors.primary,
-    fontWeight: '700'
+    elevation: 3
   },
   climateCard: {
     backgroundColor: theme.colors.surface,
-    borderRadius: 22,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    shadowColor: '#0A2A40',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4
+    borderColor: '#E4EFED',
+    padding: 18,
+    shadowColor: '#9CBFBB',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 5
   },
   climateCardDanger: {
-    borderColor: '#F26F7D',
-    backgroundColor: '#FFF2F4'
+    borderColor: '#FFD0D2',
+    backgroundColor: '#FFF7F7'
   },
   climateTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    gap: 12
   },
   cityText: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: theme.colors.textPrimary
+    flex: 1,
+    color: theme.colors.textPrimary,
+    fontSize: 24,
+    fontWeight: '900'
   },
   cityAccent: {
-    color: theme.colors.warning
+    color: theme.colors.primary
   },
   dateText: {
     color: theme.colors.textSecondary,
-    fontWeight: '600'
+    fontSize: 13,
+    fontWeight: '700'
   },
   divider: {
     height: 1,
-    backgroundColor: theme.colors.border,
-    marginVertical: theme.spacing.sm
+    backgroundColor: '#E6EFED',
+    marginVertical: 15
   },
   metricRow: {
     flexDirection: 'row',
-    gap: 8
+    gap: 14
   },
-  metricBox: {
+  temperatureBox: {
     flex: 1,
-    borderRadius: 16,
-    backgroundColor: '#F5FBFE',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.sm
-  },
-  metricGasDanger: {
-    borderColor: '#F26F7D',
-    backgroundColor: '#FFE3E7'
-  },
-  metricHighlight: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary
+    justifyContent: 'center'
   },
   metricLabel: {
     color: theme.colors.textSecondary,
+    fontSize: 16,
     fontWeight: '600'
   },
-  metricValue: {
-    marginTop: 6,
+  temperatureValue: {
+    marginTop: 4,
     color: theme.colors.textPrimary,
-    fontSize: 26,
-    fontWeight: '800'
+    fontSize: 36,
+    fontWeight: '900'
   },
-  metricGasValueDanger: {
-    color: '#B31D3C'
+  warmText: {
+    color: theme.colors.warning,
+    fontSize: 16,
+    fontWeight: '700'
+  },
+  humidityBox: {
+    flex: 1,
+    minHeight: 116,
+    borderRadius: 18,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14
   },
   metricLabelLight: {
-    color: '#E8FBFF',
-    fontWeight: '600'
+    color: '#F6FFFF',
+    fontSize: 16,
+    fontWeight: '700'
   },
-  metricValueLight: {
-    marginTop: 6,
+  humidityValue: {
+    marginTop: 5,
     color: '#FFFFFF',
-    fontSize: 26,
+    fontSize: 36,
+    fontWeight: '900'
+  },
+  humidityText: {
+    color: '#F6FFFF',
+    fontSize: 16,
+    fontWeight: '700'
+  },
+  gasStrip: {
+    marginTop: 14,
+    borderRadius: 12,
+    backgroundColor: '#FFF6E8',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8
+  },
+  gasStripDanger: {
+    backgroundColor: '#FFE5E6'
+  },
+  gasLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  gasText: {
+    color: theme.colors.textPrimary,
     fontWeight: '800'
   },
+  gasMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  gasTextDanger: {
+    color: '#B31D3C'
+  },
   sectionHeaderRow: {
-    marginTop: theme.spacing.lg,
-    marginBottom: theme.spacing.sm,
+    marginTop: 30,
+    marginBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center'
   },
   sectionTitle: {
-    fontSize: 30,
-    fontWeight: '700',
-    color: theme.colors.textPrimary
+    color: theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '900'
   },
   refreshText: {
     color: theme.colors.warning,
+    fontWeight: '800'
+  },
+  allDevicesCard: {
+    minHeight: 70,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2EBE9',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16
+  },
+  allDevicesTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 16,
+    fontWeight: '900'
+  },
+  allDevicesMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
     fontWeight: '700'
   },
-  roomList: {
-    gap: 12
+  switchTrack: {
+    width: 38,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#E2E0EA',
+    padding: 2,
+    justifyContent: 'center'
   },
-  roomCard: {
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md
+  switchTrackOn: {
+    backgroundColor: '#CFEDEA'
   },
-  roomHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.sm
+  switchThumb: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF'
   },
-  roomTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 19,
-    fontWeight: '900'
-  },
-  roomMeta: {
-    color: theme.colors.textSecondary,
-    marginTop: 3,
-    fontWeight: '600'
-  },
-  roomCountBadge: {
-    minWidth: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#E4F8FE',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10
-  },
-  roomCountText: {
-    color: theme.colors.primary,
-    fontWeight: '900'
+  switchThumbOn: {
+    alignSelf: 'flex-end',
+    backgroundColor: theme.colors.primary
   },
   deviceGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10
+    gap: 14
   },
-  deviceCard: {
+  deviceTile: {
     flexGrow: 1,
     flexBasis: '47%',
-    borderRadius: 14,
-    backgroundColor: '#F8FCFE',
+    minHeight: 136,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.sm,
-    minHeight: 116,
+    borderColor: '#E2EBE9',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
     justifyContent: 'space-between'
   },
-  deviceCardActive: {
-    backgroundColor: '#DEF6FB',
-    borderColor: '#9BE1F0'
+  deviceTileActive: {
+    backgroundColor: '#EAF7F6',
+    borderColor: '#B7DEDB'
   },
-  deviceType: {
-    color: theme.colors.primary,
-    fontSize: 12,
-    fontWeight: '900'
+  deviceTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  deviceIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 9,
+    backgroundColor: '#EEF8F7',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  deviceIconBoxActive: {
+    backgroundColor: '#FFFFFF'
+  },
+  miniSwitchTrack: {
+    width: 34,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#E2E0EA',
+    padding: 2,
+    justifyContent: 'center'
+  },
+  miniSwitchTrackOn: {
+    backgroundColor: '#CFEDEA'
+  },
+  miniSwitchThumb: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF'
+  },
+  miniSwitchThumbOn: {
+    alignSelf: 'flex-end',
+    backgroundColor: theme.colors.primary
   },
   deviceTitle: {
+    marginTop: 12,
     color: theme.colors.textPrimary,
-    fontWeight: '800',
-    marginTop: 4
+    fontSize: 16,
+    fontWeight: '900'
   },
-  statusBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginTop: 8
+  deviceTitleActive: {
+    color: theme.colors.textPrimary
   },
-  statusOn: {
-    backgroundColor: '#D8F8F0'
-  },
-  statusOff: {
-    backgroundColor: '#E8EEF4'
-  },
-  statusText: {
-    color: theme.colors.textPrimary,
+  deviceMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
     fontWeight: '700'
+  },
+  deviceMetaActive: {
+    color: theme.colors.textSecondary
+  },
+  deviceKind: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: '900'
+  },
+  deviceKindActive: {
+    color: theme.colors.primary
   },
   loadingText: {
     marginTop: 8,
@@ -615,12 +781,11 @@ const styles = StyleSheet.create({
   },
   noteText: {
     color: theme.colors.textSecondary,
-    marginTop: theme.spacing.sm,
-    marginBottom: 2
+    marginBottom: 12
   },
   gasWarningBanner: {
-    marginTop: theme.spacing.sm,
-    borderRadius: 14,
+    marginTop: 12,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#F26F7D',
     backgroundColor: '#FFDEE3',
@@ -629,40 +794,16 @@ const styles = StyleSheet.create({
   gasWarningTitle: {
     color: '#B31D3C',
     fontSize: 14,
-    fontWeight: '800'
+    fontWeight: '900'
   },
   gasWarningBody: {
     marginTop: 4,
     color: '#B31D3C',
-    fontWeight: '600'
+    fontWeight: '700'
   },
   errorText: {
     color: theme.colors.danger,
-    marginBottom: theme.spacing.sm,
-    marginTop: 2
-  },
-  navRow: {
-    marginTop: theme.spacing.lg,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: theme.spacing.sm,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 8
-  },
-  navButton: {
-    flexGrow: 1,
-    flexBasis: '22%',
-    backgroundColor: '#E3F7FD',
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center'
-  },
-  navButtonText: {
-    color: theme.colors.primary,
+    marginBottom: 12,
     fontWeight: '700'
   },
   modalOverlay: {
@@ -675,7 +816,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 380,
-    borderRadius: 20,
+    borderRadius: 18,
     backgroundColor: '#B31D3C',
     borderWidth: 2,
     borderColor: '#FFD3DA',
@@ -756,10 +897,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#E8EEF4'
   },
-  settingsCloseText: {
-    color: theme.colors.textPrimary,
-    fontWeight: '900'
-  },
   settingsSection: {
     marginTop: 12
   },
@@ -779,7 +916,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: '#F8FCFE',
+    backgroundColor: '#FFFBF6',
     padding: 6
   },
   modeToggleDark: {
@@ -814,7 +951,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: theme.colors.textPrimary,
-    backgroundColor: '#F8FCFE',
+    backgroundColor: '#FFFBF6',
     fontWeight: '700'
   },
   settingsInputDark: {
@@ -827,10 +964,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E4F8FE'
+    backgroundColor: '#F8ECD7'
   },
   resetWifiButtonText: {
-    color: theme.colors.primary,
+    color: theme.colors.warning,
     fontWeight: '900'
   },
   avatarRow: {
@@ -860,7 +997,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: theme.colors.textPrimary,
-    backgroundColor: '#F8FCFE',
+    backgroundColor: '#FFFBF6',
     fontWeight: '900',
     textAlign: 'center'
   }

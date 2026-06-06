@@ -3,10 +3,96 @@ import { API_PATHS, ENV } from '@/config/env';
 import { VoiceCommandResult } from '@/types/models';
 import { backendClient } from '@/services/http/client';
 import { extractDashboardSnapshot } from '@/services/api/deviceApi';
+import {
+  buildDeviceId,
+  buildDeviceName,
+  Esp32Device,
+  Esp32Room,
+  normalizeDeviceInput,
+  normalizeRoomInput
+} from '@/services/api/esp32Contract';
 import { mockProcessVoice } from '@/services/mock/mockApi';
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
+
+type ServerVoiceCommand = {
+  room: Esp32Room;
+  device: Esp32Device;
+  action: 'ON' | 'OFF';
+};
+
+const normalizeServerAction = (value: unknown): ServerVoiceCommand['action'] => {
+  if (typeof value !== 'string') {
+    throw new Error('Máy chủ trả về action không hợp lệ.');
+  }
+
+  const normalized = value.trim().toUpperCase();
+  if (normalized !== 'ON' && normalized !== 'OFF') {
+    throw new Error(`Máy chủ trả về action không hỗ trợ: ${value}`);
+  }
+
+  return normalized;
+};
+
+const extractServerCommand = (payload: Record<string, unknown>): ServerVoiceCommand | null => {
+  const result = isObject(payload.result) ? payload.result : null;
+  const commandSource = isObject(payload.command)
+    ? payload.command
+    : result && isObject(result.command)
+      ? result.command
+      : null;
+
+  if (!commandSource) {
+    return null;
+  }
+
+  if (
+    typeof commandSource.room !== 'string' ||
+    typeof commandSource.device !== 'string' ||
+    typeof commandSource.action !== 'string'
+  ) {
+    throw new Error('Máy chủ trả về command thiếu room/device/action.');
+  }
+
+  return {
+    room: normalizeRoomInput(commandSource.room),
+    device: normalizeDeviceInput(commandSource.device),
+    action: normalizeServerAction(commandSource.action)
+  };
+};
+
+const lowerFirst = (value: string): string =>
+  value ? value.charAt(0).toLocaleLowerCase('vi-VN') + value.slice(1) : value;
+
+const buildResultFromServerCommand = (
+  payload: Record<string, unknown>,
+  command: ServerVoiceCommand
+): VoiceCommandResult => {
+  const snapshot = extractDashboardSnapshot(payload);
+  const actionText = command.action === 'ON' ? 'Bật' : 'Tắt';
+  const deviceName = buildDeviceName(command.room, command.device);
+  const deviceId = buildDeviceId(command.room, command.device);
+  const message =
+    typeof payload.message === 'string' && payload.message.trim()
+      ? payload.message.trim()
+      : `Đã gửi lệnh ${lowerFirst(actionText)} ${lowerFirst(deviceName)} tới server.`;
+
+  return {
+    transcript: `${actionText} ${lowerFirst(deviceName)}`,
+    intent: 'device_control',
+    confidence: 1,
+    entities: {
+      room: command.room,
+      device: command.device,
+      action: command.action === 'ON' ? 'on' : 'off',
+      deviceId
+    },
+    suggestedAction: `${actionText} ${lowerFirst(deviceName)}`,
+    message,
+    snapshot: snapshot ?? undefined
+  };
+};
 
 const normalizeVoiceResponse = (payload: unknown): VoiceCommandResult => {
   if (!isObject(payload)) {
@@ -25,25 +111,40 @@ const normalizeVoiceResponse = (payload: unknown): VoiceCommandResult => {
     ? (resultSource.entities as Record<string, string | number | boolean>)
     : {};
 
-  if (!transcript || !intent) {
-    throw new Error('Máy chủ trả về dữ liệu giọng nói không đúng định dạng mong đợi.');
+  if (transcript && intent) {
+    return {
+      transcript,
+      intent,
+      confidence,
+      entities,
+      suggestedAction:
+        typeof resultSource.suggestedAction === 'string' ? resultSource.suggestedAction : undefined,
+      message:
+        typeof payload.message === 'string'
+          ? payload.message
+          : typeof resultSource.message === 'string'
+            ? resultSource.message
+            : undefined,
+      snapshot: snapshot ?? undefined
+    };
   }
 
-  return {
-    transcript,
-    intent,
-    confidence,
-    entities,
-    suggestedAction:
-      typeof resultSource.suggestedAction === 'string' ? resultSource.suggestedAction : undefined,
-    message:
-      typeof payload.message === 'string'
-        ? payload.message
-        : typeof resultSource.message === 'string'
-          ? resultSource.message
-          : undefined,
-    snapshot: snapshot ?? undefined
-  };
+  const command = extractServerCommand(payload);
+  if (command) {
+    return buildResultFromServerCommand(payload, command);
+  }
+
+  const serverStatus = typeof payload.status === 'string' ? payload.status : undefined;
+  const serverMessage =
+    typeof payload.message === 'string' && payload.message.trim()
+      ? payload.message.trim()
+      : 'Máy chủ trả về dữ liệu giọng nói không đúng định dạng mong đợi.';
+
+  if (serverStatus && serverStatus !== 'success') {
+    throw new Error(serverMessage);
+  }
+
+  throw new Error(serverMessage);
 };
 
 export const processVoiceCommand = async (audioUri: string): Promise<VoiceCommandResult> => {
@@ -57,7 +158,7 @@ export const processVoiceCommand = async (audioUri: string): Promise<VoiceComman
 
   try {
     const formData = new FormData();
-    formData.append('audio', {
+    formData.append('file', {
       uri: audioUri,
       name: 'voice-command.m4a',
       type: 'audio/m4a'

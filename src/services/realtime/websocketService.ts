@@ -17,6 +17,12 @@ const WS_URL = ENV.BACKEND_WS_URL;
 // Mobile chỉ kết nối WebSocket realtime từ server trung gian.
 // Nếu backend chưa có WebSocket, các màn hình vẫn tải dữ liệu bằng REST.
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isServerEventPayload = (payload: unknown): boolean =>
+  isObject(payload) && typeof payload.type === 'string' && !payload.devices && !payload.sensors;
+
 const emitData = (data: DashboardSnapshot): void => {
   listeners.forEach((callback) => {
     callback(data);
@@ -81,6 +87,10 @@ const connectRealWebSocket = (): void => {
   socket.onmessage = (event) => {
     try {
       const parsed = JSON.parse(event.data) as unknown;
+      if (isServerEventPayload(parsed)) {
+        return;
+      }
+
       const snapshot = mapStatePayloadToDashboardSnapshot(parsed);
       emitData(snapshot);
     } catch (error) {

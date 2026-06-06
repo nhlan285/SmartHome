@@ -177,6 +177,10 @@ export const mapStatePayloadToDashboardSnapshot = (payload: unknown): DashboardS
   pushDeviceIfPresent(devices, 'kitchen', data.kitchen, 'door', updatedAt);
   pushDeviceIfPresent(devices, 'hallway', data.hallway, 'light', updatedAt);
 
+  if (devices.length === 0 && !isObject(data.sensors)) {
+    throw new Error('Payload realtime không chứa trạng thái thiết bị hoặc cảm biến.');
+  }
+
   return {
     devices,
     sensors: {

@@ -73,17 +73,15 @@ npm install
 Chỉnh file [src/config/env.ts](src/config/env.ts):
 
 ```ts
-export const ENV = {
-  BACKEND_BASE_URL: 'http://172.20.10.4:8000',
-  ESP32_BASE_URL: 'http://172.20.10.3',
-  DEVICE_WS_URL: 'ws://172.20.10.3:81',
+const RAW_ENV = {
+  BACKEND_BASE_URL: 'https://dean-habitat-eatable.ngrok-free.dev',
+  BACKEND_WS_URL: 'wss://dean-habitat-eatable.ngrok-free.dev/ws',
   USE_MOCKS: false
 } as const;
 ```
 
-- `BACKEND_BASE_URL`: backend AI/history.
-- `ESP32_BASE_URL`: HTTP API của ESP32.
-- `DEVICE_WS_URL`: WebSocket realtime của ESP32.
+- `BACKEND_BASE_URL`: server trung gian AI/ESP32 qua ngrok.
+- `BACKEND_WS_URL`: WebSocket realtime của server trung gian.
 - `USE_MOCKS`: `true` để test UI bằng mock, `false` để gọi thiết bị thật.
 
 ## Cấu Hình Firmware ESP32
@@ -133,14 +131,16 @@ Invoke-RestMethod "http://172.20.10.3/control?room=living&device=light&action=OF
 Kiểm tra backend:
 
 ```powershell
-Invoke-RestMethod http://172.20.10.4:8000/api/history
-curl.exe -X POST "http://172.20.10.4:8000/api/voice/process" -F "audio=@sample.m4a;type=audio/m4a"
+Invoke-RestMethod https://dean-habitat-eatable.ngrok-free.dev/api/history -Headers @{"ngrok-skip-browser-warning"="true"}
+curl.exe -X POST "https://dean-habitat-eatable.ngrok-free.dev/api/voice-audio" -H "ngrok-skip-browser-warning: true" -F "file=@sample.m4a;type=audio/m4a"
 ```
+
+Lưu ý: file ghi âm từ smartphone là `.m4a`, server cần có `ffmpeg` để chuyển sang WAV trước khi đưa vào model.
 
 Kiểm tra WebSocket:
 
 ```powershell
-npx wscat -c ws://172.20.10.3:81
+npx wscat -c wss://dean-habitat-eatable.ngrok-free.dev/ws
 ```
 
 ## Luồng Demo Gợi Ý

@@ -7,10 +7,9 @@ This document describes the API shape expected by the mobile app.
 Edit [src/config/env.ts](../src/config/env.ts):
 
 ```ts
-export const ENV = {
-  BACKEND_BASE_URL: 'http://172.20.10.4:8000',
-  ESP32_BASE_URL: 'http://172.20.10.3',
-  DEVICE_WS_URL: 'ws://172.20.10.3:81',
+const RAW_ENV = {
+  BACKEND_BASE_URL: 'https://dean-habitat-eatable.ngrok-free.dev',
+  BACKEND_WS_URL: 'wss://dean-habitat-eatable.ngrok-free.dev/ws',
   USE_MOCKS: false
 } as const;
 ```
@@ -111,28 +110,26 @@ Message payload should match the `/state` payload. The app maps each message thr
 Request:
 
 ```http
-POST /api/voice/process
+POST /api/voice-audio
 Content-Type: multipart/form-data
 ```
 
 Form field:
 
 ```text
-audio=<voice-command.m4a>
+file=<voice-command.m4a>
 ```
 
 Expected response:
 
 ```json
 {
-  "transcript": "Turn on living room light",
-  "intent": "device_control",
-  "confidence": 0.95,
-  "entities": {
-    "deviceId": "light-living-room",
-    "action": "on"
-  },
-  "suggestedAction": "Switch Living Room Light on"
+  "status": "success",
+  "command": {
+    "room": "living",
+    "device": "light",
+    "action": "ON"
+  }
 }
 ```
 

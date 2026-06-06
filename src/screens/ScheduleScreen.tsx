@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import {
   ActivityIndicator,
   Alert,
@@ -13,7 +14,6 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppNavBar } from '@/components/AppNavBar';
-import { VoicePrimaryButton } from '@/components/VoicePrimaryButton';
 import { useAppSettings } from '@/context/AppSettingsContext';
 import { RootStackParamList } from '@/navigation/AppNavigator';
 import { useLightSchedules } from '@/context/LightScheduleContext';
@@ -313,10 +313,15 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
     <SafeAreaView style={[styles.safeArea, isDarkMode && styles.safeAreaDark]}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.headerRow}>
-          <View style={styles.headerTextBox}>
-            <Text style={styles.caption}>Chế độ hẹn giờ</Text>
-            <Text style={styles.title}>Lịch bật đèn</Text>
-          </View>
+          <Pressable
+            accessibilityLabel="Quay lại menu"
+            accessibilityRole="button"
+            style={styles.backButton}
+            onPress={() => navigation.navigate('Menu')}
+          >
+            <MaterialIcons name="arrow-back" size={30} color={theme.colors.primary} />
+          </Pressable>
+          <Text style={styles.title}>Hẹn giờ đèn</Text>
           <Pressable style={styles.addButton} onPress={openCreateForm}>
             <Text style={styles.addButtonText}>+ Thêm</Text>
           </Pressable>
@@ -356,10 +361,6 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.resetButtonText}>Khôi phục 4 lịch mẫu</Text>
           </Pressable>
         </View>
-
-        <VoicePrimaryButton navigation={navigation} />
-
-        <AppNavBar navigation={navigation} currentRoute="Schedule" />
 
         {screenError ? <Text style={styles.errorText}>{screenError}</Text> : null}
         {storageError ? <Text style={styles.errorText}>{storageError}</Text> : null}
@@ -450,6 +451,8 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       </ScrollView>
 
+      <AppNavBar navigation={navigation} currentRoute="Schedule" />
+
       <Modal visible={isFormVisible} transparent animationType="slide" onRequestClose={closeForm}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -458,7 +461,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
                 {editingScheduleId ? 'Sửa lịch hẹn giờ' : 'Thêm lịch hẹn giờ'}
               </Text>
               <Pressable style={styles.closeButton} onPress={closeForm}>
-                <Text style={styles.closeButtonText}>X</Text>
+                <MaterialIcons name="close" size={20} color={theme.colors.textPrimary} />
               </Pressable>
             </View>
 
@@ -575,14 +578,22 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: theme.spacing.md,
-    paddingBottom: theme.spacing.xl
+    paddingBottom: 156
   },
   headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: theme.spacing.md,
-    gap: 12
+    justifyContent: 'center',
+    minHeight: 42,
+    marginBottom: 22
+  },
+  backButton: {
+    position: 'absolute',
+    left: 0,
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   headerTextBox: {
     flex: 1
@@ -592,12 +603,13 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   title: {
-    color: theme.colors.textPrimary,
-    fontSize: 32,
-    fontWeight: '800',
-    marginTop: 2
+    color: theme.colors.primary,
+    fontSize: 22,
+    fontWeight: '900'
   },
   addButton: {
+    position: 'absolute',
+    right: 0,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -611,7 +623,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: '#E2EBE9',
     padding: theme.spacing.md,
     marginBottom: theme.spacing.md
   },
@@ -702,8 +714,8 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md
   },
   scheduleCardEnabled: {
-    borderColor: '#9BE1F0',
-    backgroundColor: '#F6FCFE'
+    borderColor: '#B7DEDB',
+    backgroundColor: '#EAF7F6'
   },
   scheduleTopRow: {
     flexDirection: 'row',
@@ -713,7 +725,7 @@ const styles = StyleSheet.create({
   timeBox: {
     width: 76,
     borderRadius: 14,
-    backgroundColor: '#E4F8FE',
+    backgroundColor: '#E4F4F3',
     paddingVertical: 10,
     alignItems: 'center'
   },

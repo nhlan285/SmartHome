@@ -5,6 +5,12 @@ import { mapStatePayloadToDashboardSnapshot } from '@/services/api/esp32Contract
 type MessageListener = (snapshot: DashboardSnapshot) => void;
 type StatusListener = (isConnected: boolean) => void;
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isServerEventPayload = (payload: unknown): boolean =>
+  isObject(payload) && typeof payload.type === 'string' && !payload.devices && !payload.sensors;
+
 export class DeviceSocket {
   private socket: WebSocket | null = null;
   private messageListeners: MessageListener[] = [];
@@ -28,6 +34,10 @@ export class DeviceSocket {
     this.socket.onmessage = (event) => {
       try {
         const parsed = JSON.parse(event.data) as unknown;
+        if (isServerEventPayload(parsed)) {
+          return;
+        }
+
         const snapshot = mapStatePayloadToDashboardSnapshot(parsed);
         this.messageListeners.forEach((listener) => listener(snapshot));
       } catch {

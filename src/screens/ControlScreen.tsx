@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import {
   ActivityIndicator,
   Modal,
@@ -11,7 +12,6 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppNavBar } from '@/components/AppNavBar';
-import { VoicePrimaryButton } from '@/components/VoicePrimaryButton';
 import { useAppSettings } from '@/context/AppSettingsContext';
 import { RootStackParamList } from '@/navigation/AppNavigator';
 import { controlDevice, DeviceAction, getDeviceState } from '@/services/api/deviceApi';
@@ -25,7 +25,7 @@ import {
   extractRoomDeviceFromDeviceId
 } from '@/services/api/esp32Contract';
 import { theme } from '@/styles/theme';
-import { getDeviceKindLabel, getDeviceStatusLabel, getRoomLabel, ROOM_ORDER } from '@/utils/deviceRooms';
+import { getDeviceKindLabel, getDeviceStatusLabel, getRoomLabel } from '@/utils/deviceRooms';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Control'>;
 
@@ -35,44 +35,62 @@ type ControlTarget = {
   label: string;
 };
 
-type ControlRoomGroup = {
-  room: Esp32Room;
-  label: string;
-  targets: ControlTarget[];
-  onCount: number;
-  totalCount: number;
-};
-
 const GAS_ALERT_THRESHOLD = 1500;
 
-// UI không gọi phần cứng trực tiếp.
-// Toàn bộ lệnh điều khiển đi qua service controlDevice(...), rồi service gửi lên server.
 const DEFAULT_CONTROL_TARGETS: ControlTarget[] = [
   { room: 'living', device: 'light', label: 'Đèn phòng khách' },
   { room: 'living', device: 'fan', label: 'Quạt phòng khách' },
+  { room: 'living', device: 'door', label: 'Cửa phòng khách' },
   { room: 'bedroom', device: 'light', label: 'Đèn phòng ngủ' },
   { room: 'bedroom', device: 'fan', label: 'Quạt phòng ngủ' },
+  { room: 'bedroom', device: 'door', label: 'Cửa phòng ngủ' },
   { room: 'kitchen', device: 'light', label: 'Đèn nhà bếp' },
   { room: 'kitchen', device: 'fan', label: 'Quạt nhà bếp' },
+  { room: 'kitchen', device: 'door', label: 'Cửa nhà bếp' },
   { room: 'hallway', device: 'light', label: 'Đèn hành lang' }
 ];
 
-const groupControlTargetsByRoom = (
-  targets: ControlTarget[],
-  statusByDeviceId: Map<string, string>
-): ControlRoomGroup[] =>
-  ROOM_ORDER.map((room) => {
-    const roomTargets = targets.filter((target) => target.room === room);
-    return {
-      room,
-      label: getRoomLabel(room),
-      targets: roomTargets,
-      onCount: roomTargets.filter(
-        (target) => statusByDeviceId.get(buildDeviceId(target.room, target.device)) === 'ON'
-      ).length,
-      totalCount: roomTargets.length
-    };
-  }).filter((group) => group.totalCount > 0);
+const getDeviceIcon = (device: Esp32Device): keyof typeof MaterialIcons.glyphMap => {
+  if (device === 'light') {
+    return 'lightbulb';
+  }
+
+  if (device === 'fan') {
+    return 'air';
+  }
+
+  return 'meeting-room';
+};
+
+const getSyntheticIp = (deviceId: string): string => {
+  const sum = deviceId.split('').reduce((total, char) => total + char.charCodeAt(0), 0);
+  return `192.168.1.${(sum % 180) + 20}`;
+};
+
+const formatLastAction = (iso?: string): string => {
+  if (!iso) {
+    return 'Đang chờ dữ liệu';
+  }
+
+  const timestamp = new Date(iso).getTime();
+  const diffMinutes = Math.max(0, Math.round((Date.now() - timestamp) / 60000));
+
+  if (diffMinutes < 1) {
+    return 'Vừa cập nhật';
+  }
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes} phút trước`;
+  }
+
+  const hours = Math.round(diffMinutes / 60);
+  if (hours < 24) {
+    return `${hours} giờ trước`;
+  }
+
+  const days = Math.round(hours / 24);
+  return `${days} ngày trước`;
+};
 
 export const ControlScreen: React.FC<Props> = ({ navigation }) => {
   const { isDarkMode } = useAppSettings();
@@ -90,6 +108,14 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
     const map = new Map<string, string>();
     (snapshot?.devices ?? []).forEach((item) => {
       map.set(item.deviceId, item.status.toUpperCase());
+    });
+    return map;
+  }, [snapshot]);
+
+  const deviceById = useMemo(() => {
+    const map = new Map<string, DashboardSnapshot['devices'][number]>();
+    (snapshot?.devices ?? []).forEach((item) => {
+      map.set(item.deviceId, item);
     });
     return map;
   }, [snapshot]);
@@ -127,11 +153,6 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
 
     return Array.from(uniqueTargets.values());
   }, [snapshot]);
-
-  const controlRoomGroups = useMemo(
-    () => groupControlTargetsByRoom(controlTargets, statusByDeviceId),
-    [controlTargets, statusByDeviceId]
-  );
 
   useEffect(() => {
     let isMounted = true;
@@ -188,7 +209,6 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
     });
   };
 
-  // Luồng điều khiển: người dùng bấm nút -> mobile gửi lệnh lên server -> server trả snapshot mới.
   const handleControl = async (
     room: Esp32Room,
     device: Esp32Device,
@@ -212,7 +232,6 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
       const message = error instanceof Error ? error.message : 'Gửi lệnh thất bại.';
       setErrorMessage(message);
 
-      // Debug nhanh khi API lỗi: kiểm tra BACKEND_BASE_URL và endpoint /api/devices/control.
       console.error('[ControlScreen] Lỗi điều khiển thiết bị', {
         room,
         device,
@@ -226,16 +245,23 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <SafeAreaView style={[styles.safeArea, isDarkMode && styles.safeAreaDark]}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.caption}>Điều khiển thiết bị</Text>
-            <Text style={styles.title}>Trạng thái hoạt động</Text>
-          </View>
-          <View style={styles.headerDot} />
+          <Pressable
+            accessibilityLabel="Quay lại menu"
+            accessibilityRole="button"
+            style={styles.backButton}
+            onPress={() => navigation.navigate('Menu')}
+          >
+            <MaterialIcons name="arrow-back" size={30} color={theme.colors.primary} />
+          </Pressable>
+          <Text style={styles.title}>Trạng thái hoạt động</Text>
         </View>
 
-        <Text style={styles.subTitle}>Đang điều khiển: {currentTarget}</Text>
+        <View style={styles.statusSummary}>
+          <Text style={styles.summaryLabel}>Thao tác gần nhất</Text>
+          <Text style={styles.summaryValue}>{currentTarget}</Text>
+        </View>
 
         {isGasDanger ? (
           <Pressable
@@ -249,10 +275,6 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
           </Pressable>
         ) : null}
 
-        <VoicePrimaryButton navigation={navigation} />
-
-        <AppNavBar navigation={navigation} currentRoute="Control" />
-
         {isSending ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator color={theme.colors.primary} />
@@ -263,82 +285,85 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
         {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
-        <View style={styles.roomControlList}>
-          {controlRoomGroups.map((group) => (
-            <View key={group.room} style={styles.roomControlCard}>
-              <View style={styles.roomHeaderRow}>
-                <View>
-                  <Text style={styles.roomTitle}>{group.label}</Text>
-                  <Text style={styles.roomMeta}>
-                    {group.onCount}/{group.totalCount} thiết bị đang bật
-                  </Text>
-                </View>
-                <View style={styles.roomCountBadge}>
-                  <Text style={styles.roomCountText}>{group.totalCount}</Text>
-                </View>
-              </View>
+        <View style={styles.deviceList}>
+          {controlTargets.map((target) => {
+            const deviceId = buildDeviceId(target.room, target.device);
+            const currentStatus = statusByDeviceId.get(deviceId) ?? 'UNKNOWN';
+            const currentDevice = deviceById.get(deviceId);
+            const isOn = currentStatus === 'ON';
 
-              <View style={styles.deviceGrid}>
-                {group.targets.map((target) => {
-                  const deviceId = buildDeviceId(target.room, target.device);
-                  const currentStatus = statusByDeviceId.get(deviceId) ?? 'UNKNOWN';
-                  const isOn = currentStatus === 'ON';
-
-                  return (
-                    <View
-                      key={`${target.room}-${target.device}`}
-                      style={[styles.deviceCard, isOn && styles.deviceCardActive]}
-                    >
-                      <View style={styles.deviceHeaderRow}>
-                        <View style={styles.deviceTextBox}>
-                          <Text style={styles.deviceKind}>{getDeviceKindLabel(target.device)}</Text>
-                          <Text style={styles.deviceName} numberOfLines={2}>
-                            {target.label}
-                          </Text>
-                          <Text style={styles.deviceMeta}>
-                            Trạng thái: {getDeviceStatusLabel(currentStatus)}
-                          </Text>
-                        </View>
-                        <View style={[styles.deviceMarker, isOn && styles.deviceMarkerOn]} />
-                      </View>
-
-                      <View style={styles.row}>
-                        <Pressable
-                          style={[
-                            styles.actionButton,
-                            styles.onButton,
-                            isSending && styles.disabledButton
-                          ]}
-                          disabled={isSending}
-                          onPress={() => {
-                            void handleControl(target.room, target.device, 'ON');
-                          }}
-                        >
-                          <Text style={styles.actionText}>Bật</Text>
-                        </Pressable>
-
-                        <Pressable
-                          style={[
-                            styles.actionButton,
-                            styles.offButton,
-                            isSending && styles.disabledButton
-                          ]}
-                          disabled={isSending}
-                          onPress={() => {
-                            void handleControl(target.room, target.device, 'OFF');
-                          }}
-                        >
-                          <Text style={styles.actionText}>Tắt</Text>
-                        </Pressable>
-                      </View>
+            return (
+              <View key={`${target.room}-${target.device}`} style={styles.deviceCard}>
+                <View style={styles.deviceTopRow}>
+                  <View style={styles.deviceTitleBox}>
+                    <View style={styles.deviceNameRow}>
+                      <MaterialIcons name={getDeviceIcon(target.device)} size={22} color={theme.colors.primary} />
+                      <Text style={styles.deviceName}>{target.label}</Text>
                     </View>
-                  );
-                })}
+                    <Text style={styles.deviceSub}>{getRoomLabel(target.room)}</Text>
+                  </View>
+                  <View style={[styles.statusPill, isOn ? styles.statusOn : styles.statusOff]}>
+                    <MaterialIcons name="power-settings-new" size={16} color="#FFFFFF" />
+                    <Text style={styles.statusPillText}>{isOn ? 'BẬT' : 'TẮT'}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.divider} />
+
+                <View style={styles.infoList}>
+                  <View style={styles.infoRow}>
+                    <MaterialIcons name="access-time" size={15} color="#A7A7A7" />
+                    <Text style={styles.infoText}>Lần cuối: {formatLastAction(currentDevice?.updatedAt)}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <MaterialIcons name="language" size={15} color="#A7A7A7" />
+                    <Text style={styles.infoText}>IP: {getSyntheticIp(deviceId)}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <MaterialIcons name="settings" size={15} color="#A7A7A7" />
+                    <Text style={styles.infoText}>
+                      Hành động: {isOn ? 'Đã bật' : currentStatus === 'OFF' ? 'Đã tắt' : 'Chưa rõ'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.actionRow}>
+                  <Pressable
+                    style={[
+                      styles.actionButton,
+                      styles.onButton,
+                      isOn && styles.actionButtonSelected,
+                      isSending && styles.disabledButton
+                    ]}
+                    disabled={isSending}
+                    onPress={() => {
+                      void handleControl(target.room, target.device, 'ON');
+                    }}
+                  >
+                    <Text style={styles.actionButtonText}>Bật</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.actionButton,
+                      styles.offButton,
+                      !isOn && currentStatus === 'OFF' && styles.actionButtonSelected,
+                      isSending && styles.disabledButton
+                    ]}
+                    disabled={isSending}
+                    onPress={() => {
+                      void handleControl(target.room, target.device, 'OFF');
+                    }}
+                  >
+                    <Text style={styles.actionButtonText}>Tắt</Text>
+                  </Pressable>
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
       </ScrollView>
+
+      <AppNavBar navigation={navigation} currentRoute="Control" />
 
       <Modal
         visible={isGasAlertModalVisible}
@@ -353,10 +378,7 @@ export const ControlScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.modalMessage}>
               Khí gas vượt ngưỡng {GAS_ALERT_THRESHOLD} ppm. Còi cảnh báo trên phần cứng đã kích hoạt.
             </Text>
-            <Pressable
-              style={styles.modalButton}
-              onPress={() => setIsGasAlertModalVisible(false)}
-            >
+            <Pressable style={styles.modalButton} onPress={() => setIsGasAlertModalVisible(false)}>
               <Text style={styles.modalButtonText}>Đã hiểu</Text>
             </Pressable>
           </View>
@@ -375,38 +397,50 @@ const styles = StyleSheet.create({
     backgroundColor: '#101D25'
   },
   container: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 28
+    paddingHorizontal: 24,
+    paddingTop: 22,
+    paddingBottom: 156
   },
   headerRow: {
+    minHeight: 42,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18
   },
-  caption: {
-    color: theme.colors.textSecondary,
-    fontWeight: '600'
+  backButton: {
+    position: 'absolute',
+    left: 0,
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   title: {
-    marginTop: 2,
-    fontSize: 32,
-    fontWeight: '800',
-    color: theme.colors.textPrimary,
-    marginBottom: 8
+    flex: 1,
+    marginLeft: 50,
+    color: theme.colors.primary,
+    fontSize: 22,
+    fontWeight: '900',
+    textAlign: 'right'
   },
-  headerDot: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#DDF6FC',
+  statusSummary: {
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#A4DEEF'
+    borderColor: '#E2EBE9',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    marginBottom: 14
   },
-  subTitle: {
-    marginBottom: 14,
+  summaryLabel: {
     color: theme.colors.textSecondary,
-    fontWeight: '600'
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  summaryValue: {
+    marginTop: 4,
+    color: theme.colors.textPrimary,
+    fontWeight: '900'
   },
   gasWarningBanner: {
     backgroundColor: '#FFDEE3',
@@ -418,169 +452,143 @@ const styles = StyleSheet.create({
   },
   gasWarningTitle: {
     color: '#B31D3C',
-    fontWeight: '800',
+    fontWeight: '900',
     fontSize: 15
   },
   gasWarningBody: {
     color: '#B31D3C',
     marginTop: 4,
-    fontWeight: '600'
-  },
-  navRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 8
-  },
-  navButton: {
-    flexGrow: 1,
-    flexBasis: '22%',
-    backgroundColor: '#E4F8FE',
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center'
-  },
-  navButtonText: {
-    color: theme.colors.primary,
     fontWeight: '700'
   },
   loadingBox: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     marginBottom: 10
   },
   loadingText: {
-    marginTop: 6,
-    color: theme.colors.textSecondary
+    color: theme.colors.textSecondary,
+    fontWeight: '700'
   },
   successText: {
     color: theme.colors.success,
-    marginBottom: 8
+    marginBottom: 8,
+    fontWeight: '800'
   },
   errorText: {
     color: theme.colors.danger,
-    marginBottom: 8
+    marginBottom: 8,
+    fontWeight: '800'
   },
-  roomControlList: {
-    gap: 12
+  deviceList: {
+    gap: 16
   },
-  roomControlCard: {
+  deviceCard: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 18,
-    padding: theme.spacing.md
+    borderColor: '#E2EBE9',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#9CBFBB',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.11,
+    shadowRadius: 12,
+    elevation: 3
   },
-  roomHeaderRow: {
+  deviceTopRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.sm
+    gap: 12
   },
-  roomTitle: {
-    color: theme.colors.textPrimary,
+  deviceTitleBox: {
+    flex: 1
+  },
+  deviceNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7
+  },
+  deviceName: {
+    flex: 1,
+    color: theme.colors.primary,
     fontSize: 19,
     fontWeight: '900'
   },
-  roomMeta: {
+  deviceSub: {
+    marginTop: 4,
     color: theme.colors.textSecondary,
-    marginTop: 3,
-    fontWeight: '600'
+    fontSize: 12,
+    fontWeight: '700'
   },
-  roomCountBadge: {
-    minWidth: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#E4F8FE',
+  statusPill: {
+    minWidth: 62,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10
+    gap: 4
   },
-  roomCountText: {
-    color: theme.colors.primary,
-    fontWeight: '900'
+  statusOn: {
+    backgroundColor: theme.colors.success
   },
-  deviceGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10
+  statusOff: {
+    backgroundColor: theme.colors.danger
   },
-  deviceCard: {
-    backgroundColor: '#F8FCFE',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 2,
-    flexGrow: 1,
-    flexBasis: '47%'
+  statusPillText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 12
   },
-  deviceCardActive: {
-    backgroundColor: '#DEF6FB',
-    borderColor: '#9BE1F0'
+  divider: {
+    height: 1,
+    backgroundColor: '#E6EFED',
+    marginVertical: 12
   },
-  deviceHeaderRow: {
+  infoList: {
+    gap: 8
+  },
+  infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    gap: 8
   },
-  deviceTextBox: {
-    flex: 1,
-    paddingRight: 8
-  },
-  deviceKind: {
-    color: theme.colors.primary,
-    fontSize: 12,
-    fontWeight: '900',
-    marginBottom: 3
-  },
-  deviceName: {
-    fontWeight: '700',
-    color: theme.colors.textPrimary
-  },
-  deviceMeta: {
+  infoText: {
     color: theme.colors.textSecondary,
-    marginTop: 3
+    fontSize: 12,
+    fontWeight: '700'
   },
-  deviceMarker: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#D8F3FA',
-    borderWidth: 1,
-    borderColor: '#9DD9EA'
-  },
-  deviceMarkerOn: {
-    backgroundColor: '#D8F8F0',
-    borderColor: '#73D8BE'
-  },
-  row: {
+  actionRow: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 12
+    marginTop: 14
   },
   actionButton: {
     flex: 1,
+    minHeight: 42,
     borderRadius: 10,
-    paddingVertical: 11,
-    alignItems: 'center'
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.78
+  },
+  actionButtonSelected: {
+    opacity: 1
   },
   onButton: {
-    backgroundColor: '#14B89C'
+    backgroundColor: theme.colors.success
   },
   offButton: {
-    backgroundColor: '#7ABEE9'
+    backgroundColor: theme.colors.danger
   },
   disabledButton: {
-    opacity: 0.6
+    opacity: 0.5
   },
-  actionText: {
+  actionButtonText: {
     color: '#FFFFFF',
-    fontWeight: '700'
+    fontWeight: '900'
   },
   modalOverlay: {
     flex: 1,
@@ -592,7 +600,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 380,
-    borderRadius: 20,
+    borderRadius: 18,
     backgroundColor: '#B31D3C',
     borderWidth: 2,
     borderColor: '#FFD3DA',
