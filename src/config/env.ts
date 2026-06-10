@@ -61,8 +61,8 @@ const normalizeWebSocketUrl = (url: string): string => {
 };
 
 const RAW_ENV = {
-  BACKEND_BASE_URL: 'https://recount-remnant-bagging.ngrok-free.dev',
-  BACKEND_WS_URL: 'wss://recount-remnant-bagging.ngrok-free.dev/ws',
+  BACKEND_BASE_URL: 'https://dean-habitat-eatable.ngrok-free.dev/',
+  BACKEND_WS_URL: 'wss://dean-habitat-eatable.ngrok-free.dev/ws',
   USE_MOCKS: false
 } as const;
 

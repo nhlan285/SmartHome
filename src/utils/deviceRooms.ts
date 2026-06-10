@@ -39,15 +39,15 @@ export const getRoomLabel = (room: DeviceRoomKey): string => ROOM_LABELS[room];
 
 export const getDeviceKindLabel = (kind: DeviceKindKey): string => DEVICE_KIND_LABELS[kind];
 
-export const getDeviceStatusLabel = (status: string | undefined): string => {
+export const getDeviceStatusLabel = (status: string | undefined, kind?: DeviceKindKey): string => {
   const normalized = status?.trim().toLowerCase();
 
   if (normalized === 'on') {
-    return 'Bật';
+    return kind === 'door' ? 'Mở' : 'Bật';
   }
 
   if (normalized === 'off') {
-    return 'Tắt';
+    return kind === 'door' ? 'Đóng' : 'Tắt';
   }
 
   return 'Không rõ';

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppNavBar } from '@/components/AppNavBar';
+import { TimeWheelPickerModal } from '@/components/TimeWheelPickerModal';
 import { useAppSettings } from '@/context/AppSettingsContext';
 import { RootStackParamList } from '@/navigation/AppNavigator';
 import { useLightSchedules } from '@/context/LightScheduleContext';
@@ -104,6 +105,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
   const [runningScheduleId, setRunningScheduleId] = useState<string | null>(null);
   const [screenError, setScreenError] = useState('');
   const [isFormVisible, setIsFormVisible] = useState(false);
+  const [isTimePickerVisible, setIsTimePickerVisible] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [form, setForm] = useState<LightScheduleDraft>(() => createBlankForm());
   const [formError, setFormError] = useState('');
@@ -247,6 +249,7 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
 
   const closeForm = (): void => {
     setIsFormVisible(false);
+    setIsTimePickerVisible(false);
     setFormError('');
   };
 
@@ -475,15 +478,17 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
             />
 
             <Text style={styles.inputLabel}>Giờ hẹn</Text>
-            <TextInput
-              style={styles.input}
-              value={form.time}
-              onChangeText={(time) => setForm((current) => ({ ...current, time }))}
-              placeholder="HH:mm"
-              placeholderTextColor={theme.colors.textSecondary}
-              keyboardType="numbers-and-punctuation"
-              maxLength={5}
-            />
+            <Pressable
+              accessibilityRole="button"
+              style={styles.timePickerButton}
+              onPress={() => setIsTimePickerVisible(true)}
+            >
+              <View>
+                <Text style={styles.timePickerValue}>{form.time}</Text>
+                <Text style={styles.timePickerHint}>Cuộn để chọn giờ và phút</Text>
+              </View>
+              <MaterialIcons name="schedule" size={20} color={theme.colors.primary} />
+            </Pressable>
 
             <Text style={styles.inputLabel}>Phạm vi đèn</Text>
             <View style={styles.optionGrid}>
@@ -562,6 +567,13 @@ export const ScheduleScreen: React.FC<Props> = ({ navigation }) => {
               </Pressable>
             </View>
           </View>
+
+          <TimeWheelPickerModal
+            visible={isTimePickerVisible}
+            initialTime={form.time}
+            onClose={() => setIsTimePickerVisible(false)}
+            onConfirm={(time) => setForm((current) => ({ ...current, time }))}
+          />
         </View>
       </Modal>
     </SafeAreaView>
@@ -874,6 +886,28 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     color: theme.colors.textPrimary,
     backgroundColor: '#F8FCFE',
+    fontWeight: '700'
+  },
+  timePickerButton: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#F8FCFE',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10
+  },
+  timePickerValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 24,
+    fontWeight: '900'
+  },
+  timePickerHint: {
+    marginTop: 2,
+    color: theme.colors.textSecondary,
     fontWeight: '700'
   },
   optionGrid: {

@@ -15,25 +15,23 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AppNavBar } from '@/components/AppNavBar';
 import { useAppSettings } from '@/context/AppSettingsContext';
 import { RootStackParamList } from '@/navigation/AppNavigator';
-import { getDeviceState } from '@/services/api/deviceApi';
+import { controlDevice, getDeviceState } from '@/services/api/deviceApi';
 import { connectWebSocket } from '@/services/realtime/websocketService';
 import { theme } from '@/styles/theme';
-import { DashboardSnapshot } from '@/types/models';
+import { DashboardSnapshot, DeviceStatus } from '@/types/models';
 import {
+  DeviceRoomKey,
   getDeviceKindLabel,
   getDeviceStatusLabel,
+  getRoomLabel,
   groupDevicesByRoom,
+  RoomDeviceGroup,
   RoomDeviceItem
 } from '@/utils/deviceRooms';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
 
-type DeviceTile = {
-  groupLabel: string;
-  item: RoomDeviceItem;
-};
-
-const GAS_ALERT_THRESHOLD = 1500;
+const GAS_ALERT_THRESHOLD = 2000;
 
 const getGreeting = (): string => {
   const hour = new Date().getHours();
@@ -85,10 +83,23 @@ const getDeviceIcon = (kind: RoomDeviceItem['kind']): keyof typeof MaterialIcons
   return 'settings-remote';
 };
 
+const formatUpdatedTime = (iso?: string): string => {
+  if (!iso) {
+    return '--:--';
+  }
+
+  return new Date(iso).toLocaleTimeString('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
 export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busyDevices, setBusyDevices] = useState<Record<string, boolean>>({});
+  const [selectedRoom, setSelectedRoom] = useState<DeviceRoomKey | null>(null);
   const [isGasAlertModalVisible, setIsGasAlertModalVisible] = useState(false);
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
   const {
@@ -149,10 +160,30 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
     };
   }, []);
 
+  const roomGroups = useMemo(() => groupDevicesByRoom(snapshot?.devices ?? []), [snapshot]);
+  const activeRoom =
+    selectedRoom && roomGroups.some((group) => group.room === selectedRoom)
+      ? selectedRoom
+      : roomGroups[0]?.room ?? null;
+  const selectedRoomGroup = useMemo<RoomDeviceGroup | null>(
+    () => roomGroups.find((group) => group.room === activeRoom) ?? null,
+    [activeRoom, roomGroups]
+  );
+
+  useEffect(() => {
+    if (activeRoom !== selectedRoom) {
+      setSelectedRoom(activeRoom);
+    }
+  }, [activeRoom, selectedRoom]);
+
   const temperature = snapshot?.sensors.temperatureC;
   const humidity = snapshot?.sensors.humidityPercent;
   const gasNumber = snapshot?.sensors.gasPpm;
   const isGasDanger = typeof gasNumber === 'number' && gasNumber > GAS_ALERT_THRESHOLD;
+  const allDevicesCount = snapshot?.devices.length ?? 0;
+  const activeDevicesCount =
+    snapshot?.devices.filter((device) => device.status === 'on').length ?? 0;
+  const visibleDevices = selectedRoomGroup?.devices ?? [];
 
   useEffect(() => {
     if (isGasDanger) {
@@ -160,25 +191,58 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
     }
   }, [isGasDanger]);
 
+  const handleToggleDevice = async (item: RoomDeviceItem): Promise<void> => {
+    const deviceId = item.device.deviceId;
+    const nextAction: DeviceStatus = item.device.status === 'on' ? 'off' : 'on';
+
+    setError(null);
+    setBusyDevices((current) => ({
+      ...current,
+      [deviceId]: true
+    }));
+
+    try {
+      const result = await controlDevice({ deviceId, action: nextAction });
+
+      setSnapshot((current) => {
+        if (result.snapshot) {
+          return result.snapshot;
+        }
+
+        if (!current) {
+          return current;
+        }
+
+        const updatedDevice = result.updatedDevice ?? {
+          ...item.device,
+          status: nextAction,
+          updatedAt: new Date().toISOString()
+        };
+
+        return {
+          ...current,
+          devices: current.devices.map((device) =>
+            device.deviceId === updatedDevice.deviceId ? updatedDevice : device
+          )
+        };
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Không thể điều khiển thiết bị.';
+      setError(message);
+    } finally {
+      setBusyDevices((current) => {
+        const next = { ...current };
+        delete next[deviceId];
+        return next;
+      });
+    }
+  };
+
   const cityDate = new Date().toLocaleDateString('vi-VN', {
     day: '2-digit',
     month: 'long',
     year: 'numeric'
   });
-
-  const roomGroups = useMemo(() => groupDevicesByRoom(snapshot?.devices ?? []), [snapshot]);
-  const deviceTiles = useMemo<DeviceTile[]>(
-    () =>
-      roomGroups.reduce<DeviceTile[]>((items, group) => {
-        group.devices.forEach((item) => {
-          items.push({ groupLabel: group.label, item });
-        });
-        return items;
-      }, []),
-    [roomGroups]
-  );
-  const allDevicesCount = deviceTiles.length;
-  const activeDevicesCount = deviceTiles.filter(({ item }) => item.device.status === 'on').length;
 
   const lastUpdated = snapshot?.sensors.updatedAt
     ? new Date(snapshot.sensors.updatedAt).toLocaleTimeString('vi-VN', {
@@ -229,7 +293,7 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
             <View style={styles.temperatureBox}>
               <Text style={styles.metricLabel}>Nhiệt độ</Text>
               <Text style={styles.temperatureValue}>
-                {typeof temperature === 'number' ? Math.round(temperature) : '-'}°
+                {typeof temperature === 'number' ? Math.round(temperature) : '-'}°C
               </Text>
               <Text style={styles.warmText}>{getWeatherNote(temperature)}</Text>
             </View>
@@ -287,53 +351,119 @@ export const DashboardScreen: React.FC<Props> = ({ navigation }) => {
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <View style={styles.allDevicesCard}>
-          <View>
-            <Text style={styles.allDevicesTitle}>Tất cả thiết bị</Text>
+          <View style={styles.allDevicesTextBox}>
+            <Text style={styles.allDevicesTitle}>
+              {selectedRoomGroup ? selectedRoomGroup.label : 'Tất cả thiết bị'}
+            </Text>
             <Text style={styles.allDevicesMeta}>
-              {activeDevicesCount}/{allDevicesCount} thiết bị đang bật
+              {selectedRoomGroup
+                ? `${selectedRoomGroup.onCount}/${selectedRoomGroup.totalCount} thiết bị đang bật • ${selectedRoomGroup.label}`
+                : `${activeDevicesCount}/${allDevicesCount} thiết bị đang bật`}
             </Text>
           </View>
-          <View style={[styles.switchTrack, activeDevicesCount > 0 && styles.switchTrackOn]}>
-            <View style={[styles.switchThumb, activeDevicesCount > 0 && styles.switchThumbOn]} />
-          </View>
         </View>
 
-        {deviceTiles.length === 0 ? (
-          <Text style={styles.noteText}>Chưa có dữ liệu trạng thái thiết bị.</Text>
+        {roomGroups.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.roomTabsRow}
+            style={styles.roomTabsScroller}
+          >
+            {roomGroups.map((group) => {
+              const isActive = group.room === selectedRoomGroup?.room;
+
+              return (
+                <Pressable
+                  key={group.room}
+                  accessibilityRole="button"
+                  onPress={() => setSelectedRoom(group.room)}
+                  style={[styles.roomTab, isActive && styles.roomTabActive]}
+                >
+                  <Text style={[styles.roomTabTitle, isActive && styles.roomTabTitleActive]}>
+                    {group.label}
+                  </Text>
+                  <Text style={[styles.roomTabMeta, isActive && styles.roomTabMetaActive]}>
+                    {group.totalCount} thiết bị
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
         ) : null}
 
-        <View style={styles.deviceGrid}>
-          {deviceTiles.map(({ groupLabel, item }) => {
-            const isOn = item.device.status === 'on';
+        {selectedRoomGroup ? (
+          <View style={styles.roomSummaryRow}>
+            <Text style={styles.roomSummaryTitle}>{selectedRoomGroup.label}</Text>
+            <Text style={styles.roomSummaryMeta}>
+              {selectedRoomGroup.onCount}/{selectedRoomGroup.totalCount} thiết bị đang hoạt động
+            </Text>
+          </View>
+        ) : null}
 
-            return (
-              <View key={item.device.deviceId} style={[styles.deviceTile, isOn && styles.deviceTileActive]}>
-                <View style={styles.deviceTopRow}>
-                  <View style={[styles.deviceIconBox, isOn && styles.deviceIconBoxActive]}>
-                    <MaterialIcons
-                      name={getDeviceIcon(item.kind)}
-                      size={28}
-                      color={theme.colors.primary}
-                    />
+        {visibleDevices.length === 0 ? (
+          <Text style={styles.noteText}>Chưa có dữ liệu trạng thái thiết bị cho phòng này.</Text>
+        ) : (
+          <View style={styles.deviceGrid}>
+            {visibleDevices.map((item) => {
+              const isOn = item.device.status === 'on';
+              const isBusy = Boolean(busyDevices[item.device.deviceId]);
+
+              return (
+                <View
+                  key={item.device.deviceId}
+                  style={[styles.deviceTile, isOn && styles.deviceTileActive]}
+                >
+                  <View style={styles.deviceTopRow}>
+                    <View style={[styles.deviceIconBox, isOn && styles.deviceIconBoxActive]}>
+                      <MaterialIcons
+                        name={getDeviceIcon(item.kind)}
+                        size={28}
+                        color={isOn ? theme.colors.primary : theme.colors.textSecondary}
+                      />
+                    </View>
+                    <Pressable
+                      accessibilityRole="switch"
+                      accessibilityLabel={`Điều khiển ${item.device.name}`}
+                      accessibilityState={{ checked: isOn, disabled: isBusy }}
+                      disabled={isBusy}
+                      onPress={() => {
+                        void handleToggleDevice(item);
+                      }}
+                      style={[
+                        styles.miniSwitchTrack,
+                        isOn && styles.miniSwitchTrackOn,
+                        isBusy && styles.miniSwitchTrackBusy
+                      ]}
+                    >
+                      {isBusy ? (
+                        <MaterialIcons name="hourglass-empty" size={14} color={theme.colors.primary} />
+                      ) : (
+                        <View style={[styles.miniSwitchThumb, isOn && styles.miniSwitchThumbOn]} />
+                      )}
+                    </Pressable>
                   </View>
-                  <View style={[styles.miniSwitchTrack, isOn && styles.miniSwitchTrackOn]}>
-                    <View style={[styles.miniSwitchThumb, isOn && styles.miniSwitchThumbOn]} />
+
+                  <Text style={[styles.deviceTitle, isOn && styles.deviceTitleActive]} numberOfLines={2}>
+                    {item.device.name}
+                  </Text>
+                  <Text style={[styles.deviceMeta, isOn && styles.deviceMetaActive]} numberOfLines={1}>
+                    {getDeviceStatusLabel(item.device.status, item.kind)} •{' '}
+                    {selectedRoomGroup?.label ?? getRoomLabel(item.room)}
+                  </Text>
+                  <View style={styles.deviceFooterRow}>
+                    <Text style={[styles.deviceKind, isOn && styles.deviceKindActive]}>
+                      {getDeviceKindLabel(item.kind)}
+                    </Text>
+                    <Text style={styles.deviceTime}>
+                      {isBusy ? 'Đang gửi...' : formatUpdatedTime(item.device.updatedAt)}
+                    </Text>
                   </View>
                 </View>
-
-                <Text style={[styles.deviceTitle, isOn && styles.deviceTitleActive]} numberOfLines={2}>
-                  {item.device.name}
-                </Text>
-                <Text style={[styles.deviceMeta, isOn && styles.deviceMetaActive]} numberOfLines={1}>
-                  {groupLabel} - {getDeviceStatusLabel(item.device.status)}
-                </Text>
-                <Text style={[styles.deviceKind, isOn && styles.deviceKindActive]}>
-                  {getDeviceKindLabel(item.kind)}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
 
       <AppNavBar navigation={navigation} currentRoute="Dashboard" />
@@ -656,10 +786,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16
+    justifyContent: 'center',
+    marginBottom: 12
+  },
+  allDevicesTextBox: {
+    flex: 1
   },
   allDevicesTitle: {
     color: theme.colors.textPrimary,
@@ -672,26 +803,59 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700'
   },
-  switchTrack: {
-    width: 38,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#E2E0EA',
-    padding: 2,
-    justifyContent: 'center'
+  roomTabsScroller: {
+    marginBottom: 14
   },
-  switchTrackOn: {
-    backgroundColor: '#CFEDEA'
+  roomTabsRow: {
+    gap: 10,
+    paddingRight: 8
   },
-  switchThumb: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#FFFFFF'
+  roomTab: {
+    minWidth: 96,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2EBE9',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 12
   },
-  switchThumbOn: {
-    alignSelf: 'flex-end',
-    backgroundColor: theme.colors.primary
+  roomTabActive: {
+    backgroundColor: '#172023',
+    borderColor: '#172023'
+  },
+  roomTabTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '900'
+  },
+  roomTabTitleActive: {
+    color: '#FFFFFF'
+  },
+  roomTabMeta: {
+    marginTop: 3,
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  roomTabMetaActive: {
+    color: '#C6D7DA'
+  },
+  roomSummaryRow: {
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12
+  },
+  roomSummaryTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 16,
+    fontWeight: '900'
+  },
+  roomSummaryMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700'
   },
   deviceGrid: {
     flexDirection: 'row',
@@ -701,7 +865,7 @@ const styles = StyleSheet.create({
   deviceTile: {
     flexGrow: 1,
     flexBasis: '47%',
-    minHeight: 136,
+    minHeight: 158,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E2EBE9',
@@ -740,6 +904,9 @@ const styles = StyleSheet.create({
   miniSwitchTrackOn: {
     backgroundColor: '#CFEDEA'
   },
+  miniSwitchTrackBusy: {
+    alignItems: 'center'
+  },
   miniSwitchThumb: {
     width: 16,
     height: 16,
@@ -751,7 +918,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary
   },
   deviceTitle: {
-    marginTop: 12,
+    marginTop: 14,
     color: theme.colors.textPrimary,
     fontSize: 16,
     fontWeight: '900'
@@ -760,12 +927,20 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary
   },
   deviceMeta: {
+    marginTop: 8,
     color: theme.colors.textSecondary,
     fontSize: 11,
     fontWeight: '700'
   },
   deviceMetaActive: {
     color: theme.colors.textSecondary
+  },
+  deviceFooterRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8
   },
   deviceKind: {
     color: theme.colors.primary,
@@ -774,6 +949,11 @@ const styles = StyleSheet.create({
   },
   deviceKindActive: {
     color: theme.colors.primary
+  },
+  deviceTime: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '700'
   },
   loadingText: {
     marginTop: 8,
